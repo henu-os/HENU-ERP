@@ -85,6 +85,7 @@ namespace JeevikaERP.Controllers
         }
 
         // ── POST /api/societies ───────────────────────────
+        // ── POST /api/societies ───────────────────────────
         [HttpPost]
         public IActionResult Create([FromBody] SocietyModel model)
         {
@@ -92,9 +93,41 @@ namespace JeevikaERP.Controllers
                 string.IsNullOrWhiteSpace(model.SocietyName))
                 return BadRequest(new { success = false, message = "Society Code and Name are required." });
 
+            var codeTrim = model.SocietyCode.Trim();
+
             try
             {
                 using var conn = DbHelper.GetConn();
+
+                // 1. Check if an ACTIVE society already exists with this code
+                using (var checkActive = conn.CreateCommand())
+                {
+                    checkActive.CommandText = "SELECT SocietyId FROM jeevika_erp.SocietyInfo WHERE UPPER(TRIM(SocietyCode)) = UPPER(TRIM(@code)) AND IsActive = TRUE LIMIT 1";
+                    checkActive.Parameters.AddWithValue("@code", codeTrim);
+                    var existingActive = checkActive.ExecuteScalar();
+                    if (existingActive != null)
+                    {
+                        return Conflict(new { success = false, message = "Society code already exists." });
+                    }
+                }
+
+                // 2. Clean up any inactive zombie records with this code so they never block creation
+                using (var checkInactive = conn.CreateCommand())
+                {
+                    checkInactive.CommandText = "SELECT SocietyId FROM jeevika_erp.SocietyInfo WHERE UPPER(TRIM(SocietyCode)) = UPPER(TRIM(@code)) AND IsActive = FALSE";
+                    checkInactive.Parameters.AddWithValue("@code", codeTrim);
+                    var inactiveIds = new List<int>();
+                    using (var reader = checkInactive.ExecuteReader())
+                    {
+                        while (reader.Read())
+                            inactiveIds.Add(Convert.ToInt32(reader[0]));
+                    }
+                    foreach (var oldId in inactiveIds)
+                    {
+                        HardDeleteSociety(conn, oldId);
+                    }
+                }
+
                 using var cmd  = conn.CreateCommand();
                 cmd.CommandText = @"
                     INSERT INTO jeevika_erp.SocietyInfo
@@ -183,9 +216,24 @@ namespace JeevikaERP.Controllers
             try
             {
                 using var conn = DbHelper.GetConn();
+
+                // If SocietyCode is provided, check if another active society uses it
+                if (!string.IsNullOrWhiteSpace(model.SocietyCode))
+                {
+                    using var chk = conn.CreateCommand();
+                    chk.CommandText = "SELECT SocietyId FROM jeevika_erp.SocietyInfo WHERE UPPER(TRIM(SocietyCode)) = UPPER(TRIM(@code)) AND SocietyId != @id AND IsActive = TRUE LIMIT 1";
+                    chk.Parameters.AddWithValue("@code", model.SocietyCode.Trim());
+                    chk.Parameters.AddWithValue("@id", id);
+                    if (chk.ExecuteScalar() != null)
+                    {
+                        return Conflict(new { success = false, message = "Society code already exists." });
+                    }
+                }
+
                 using var cmd  = conn.CreateCommand();
                 cmd.CommandText = @"
                     UPDATE jeevika_erp.SocietyInfo SET
+                        SocietyCode   = COALESCE(NULLIF(@code, ''), SocietyCode),
                         SocietyName   = @name,       SocMarName    = @marname,
                         StartingYear  = @startyear,
                         Address       = @addr,        City          = @city,
@@ -244,7 +292,7 @@ namespace JeevikaERP.Controllers
                     fyCmd.Parameters.AddWithValue("@sid", id);
                     fyCmd.Parameters.AddWithValue("@label", fyLabel);
                     fyCmd.Parameters.AddWithValue("@start", fyStart);
-                    fyCmd.Parameters.AddWithValue("@end", fyEnd);
+                    fyCmd.Parameters.AddWithValue("@end",   fyEnd);
                     fyCmd.ExecuteNonQuery();
 
                     using var getIdCmd = conn.CreateCommand();
@@ -279,22 +327,126 @@ namespace JeevikaERP.Controllers
             try
             {
                 using var conn = DbHelper.GetConn();
-                using var cmd  = conn.CreateCommand();
-                cmd.CommandText = @"
-                    UPDATE jeevika_erp.SocietyInfo
-                    SET IsActive = FALSE, UpdatedAt = NOW()
-                    WHERE SocietyId = @id AND IsActive = TRUE";
-                cmd.Parameters.AddWithValue("@id", id);
-
-                var rows = cmd.ExecuteNonQuery();
-                if (rows == 0)
+                var deleted = HardDeleteSociety(conn, id);
+                if (!deleted)
                     return NotFound(new { success = false, message = "Society not found." });
 
-                return Ok(new { success = true, message = "Society deleted." });
+                return Ok(new { success = true, message = "Society deleted successfully from database." });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        // ── Comprehensive Hard-Delete for Society ───────────
+        public static bool HardDeleteSociety(NpgsqlConnection conn, int id)
+        {
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                void Exec(string sql)
+                {
+                    try
+                    {
+                        using var c = conn.CreateCommand();
+                        c.Transaction = tx;
+                        c.CommandText = sql;
+                        c.ExecuteNonQuery();
+                    }
+                    catch { }
+                }
+
+                // 1. Communication tables
+                Exec($"DELETE FROM jeevika_erp.communication_outbox WHERE society_id = {id}");
+                Exec($"DELETE FROM jeevika_erp.communication_messages WHERE society_id = {id}");
+                Exec($"DELETE FROM jeevika_erp.communication_conversations WHERE society_id = {id}");
+                Exec($"DELETE FROM jeevika_erp.communication_logs WHERE society_id = {id}");
+                Exec($"DELETE FROM jeevika_erp.communication_quick_replies WHERE society_id = {id}");
+                Exec($"DELETE FROM jeevika_erp.communication_templates WHERE society_id = {id}");
+                Exec($"DELETE FROM jeevika_erp.communication_configurations WHERE society_id = {id}");
+
+                // 2. Report configs
+                Exec($"DELETE FROM jeevika_erp.socmultireportsetting WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socsavedreportconfig WHERE societyid = {id}");
+
+                // 3. Taxes & TDS
+                Exec($"DELETE FROM jeevika_erp.soctdstransaction WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.soctdschallan WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.soctdsdeductee WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.soctdsrule WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socgstchargemap WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socgstrule WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socgstcategory WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socgstrate WHERE societyid = {id}");
+
+                // 4. Funds
+                Exec($"DELETE FROM jeevika_erp.socfundinvestment WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socfundtransaction WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socfundmaster WHERE societyid = {id}");
+
+                // 5. Purchase Orders
+                Exec($"DELETE FROM jeevika_erp.socpurchaseorderitem WHERE poid IN (SELECT poid FROM jeevika_erp.socpurchaseorder WHERE societyid = {id})");
+                Exec($"DELETE FROM jeevika_erp.socpurchaseorder WHERE societyid = {id}");
+
+                // 6. Member transactions, bills, overrides
+                Exec($"DELETE FROM jeevika_erp.socmemberbillitem WHERE billid IN (SELECT billid FROM jeevika_erp.socmemberbill WHERE societyid = {id})");
+                Exec($"DELETE FROM jeevika_erp.socmemberbill WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmembernote WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmemberbilloverride WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socbillingmatrix WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socbillingsetting WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmemberopbalance WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmembertenant WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmembernominee WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmemberlien WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmembertransfer WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.soctenant WHERE societyid = {id}");
+
+                // 7. Vouchers
+                Exec($"DELETE FROM jeevika_erp.socvoucherdetail WHERE voucherid IN (SELECT voucherid FROM jeevika_erp.socvoucherheader WHERE societyid = {id})");
+                Exec($"DELETE FROM jeevika_erp.socvoucherheader WHERE societyid = {id}");
+
+                // 8. Bill Types
+                Exec($"DELETE FROM jeevika_erp.socbillingmaster WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socbilltypenote WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socbilltypehead WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socbilltype WHERE societyid = {id}");
+
+                // 9. Banking & Balances
+                Exec($"DELETE FROM jeevika_erp.socopeningbankreco WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socopeningbalance WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socfixeddeposit WHERE societyid = {id}");
+
+                // 10. Staff, Committee, Vendor, Member
+                Exec($"DELETE FROM jeevika_erp.socstaff WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.soccommittee WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socvendor WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socmember WHERE societyid = {id}");
+
+                // 11. Accounts & Groups
+                Exec($"DELETE FROM jeevika_erp.socaccount WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.socgroup WHERE societyid = {id}");
+
+                // 12. Configs & FY & Audit
+                Exec($"DELETE FROM jeevika_erp.txnumberconfig WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.financialyear WHERE societyid = {id}");
+                Exec($"DELETE FROM jeevika_erp.auditlog WHERE societyid = {id}");
+
+                // 13. Finally delete the society row itself
+                using var delCmd = conn.CreateCommand();
+                delCmd.Transaction = tx;
+                delCmd.CommandText = "DELETE FROM jeevika_erp.SocietyInfo WHERE SocietyId = @id";
+                delCmd.Parameters.AddWithValue("@id", id);
+                var rows = delCmd.ExecuteNonQuery();
+
+                tx.Commit();
+                return rows > 0;
+            }
+            catch
+            {
+                tx.Rollback();
+                throw;
             }
         }
 

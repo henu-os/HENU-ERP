@@ -517,6 +517,28 @@
     user-select: none;
   }
 
+  /* GST Columns Disabled & Blurred for Non-GST Society */
+  .btm-gst-disabled-cell {
+    opacity: 0.38 !important;
+    filter: blur(0.45px) grayscale(90%);
+    background-color: #F8F9FA !important;
+    cursor: not-allowed !important;
+    user-select: none !important;
+    transition: all 0.2s ease;
+  }
+
+  .btm-gst-disabled-cell * {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+  }
+
+  .btm-gst-disabled-th {
+    opacity: 0.55 !important;
+    filter: grayscale(70%);
+    cursor: not-allowed !important;
+    user-select: none !important;
+  }
+
   .btm-reorder-wrap {
     display: inline-flex;
     align-items: center;
@@ -1023,6 +1045,7 @@
 <script src="../../../config.js?v=20260817_08"></script>
 <script src="../../../assets/js/api.js?v=20260817_08"></script>
 <script src="../../../assets/js/auth.js?v=20260817_08"></script>
+<script src="../../../assets/js/workspace-bridge.js?v=20260817_08"></script>
 <script src="./bill-type-master.js?v=20260817_08"></script>
 </body>
 

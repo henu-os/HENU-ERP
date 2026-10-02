@@ -358,10 +358,11 @@ namespace JeevikaERP
                         ALTER TABLE jeevika_erp.SocVoucherHeader ADD COLUMN IF NOT EXISTS ClearingDate DATE;
                         ALTER TABLE jeevika_erp.SocVoucherHeader ADD COLUMN IF NOT EXISTS ClearingRemark TEXT;
 
-                        -- Only 'Maintenance' is the default bill type
-                        INSERT INTO jeevika_erp.SocBillType (SocietyId, BillTypeCode, BillTypeName, Description) VALUES
-                            (1, 'MAINT', 'Maintenance', 'Regular Monthly Maintenance Bill')
-                        ON CONFLICT DO NOTHING;
+                        -- Ensure partial unique index on societycode so deleted/inactive codes never conflict
+                        ALTER TABLE jeevika_erp.societyinfo DROP CONSTRAINT IF EXISTS societyinfo_societycode_key;
+                        CREATE UNIQUE INDEX IF NOT EXISTS societyinfo_societycode_active_unique_idx 
+                            ON jeevika_erp.societyinfo (UPPER(TRIM(societycode))) 
+                            WHERE isactive = TRUE;
 
                         -- Clean up any orphaned opening balances and billing matrix rows belonging to deleted members
                         DELETE FROM jeevika_erp.SocMemberOpBalance WHERE MemberId IN (SELECT MemberId FROM jeevika_erp.SocMember WHERE IsDeleted = TRUE);

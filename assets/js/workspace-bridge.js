@@ -16,7 +16,9 @@ const WorkspaceBridge = (() => {
         }, '*');
       } else if (typeof window.WorkspaceManager !== 'undefined' && typeof window.WorkspaceManager[action] === 'function') {
         if (action === 'setActiveSociety') {
-          window.WorkspaceManager.setActiveSociety(payload.societyId || payload.id, payload.code, payload.name, payload.gstOn, payload.fyId, payload.fyLabel);
+          window.WorkspaceManager.setActiveSociety(payload.societyId || payload.id, payload.code, payload.name, payload.gstOn, payload.fyId, payload.fyLabel, payload.isPrimary);
+        } else if (action === 'showViewOnlyModal') {
+          window.WorkspaceManager.showViewOnlyModal(payload.societyName);
         } else if (action === 'closeTab') {
           window.WorkspaceManager.closeTab(payload.tabId || payload.moduleId);
         } else if (action === 'openModule' || action === 'openTab') {
@@ -40,12 +42,15 @@ const WorkspaceBridge = (() => {
     openTab: function(moduleId, queryParams = '') {
       _send('openModule', { moduleId: moduleId, queryParams: queryParams });
     },
-    setActiveSociety: function(societyId, code, name, gstOn, fyId, fyLabel) {
+    setActiveSociety: function(societyId, code, name, gstOn, fyId, fyLabel, isPrimary = false) {
       if (typeof societyId === 'string' && isNaN(parseInt(societyId, 10))) {
-        _send('setActiveSociety', { societyId: null, code: societyId, name: code, gstOn: name, fyId: gstOn, fyLabel: fyId });
+        _send('setActiveSociety', { societyId: null, code: societyId, name: code, gstOn: name, fyId: gstOn, fyLabel: fyId, isPrimary: isPrimary });
       } else {
-        _send('setActiveSociety', { societyId: societyId, code: code, name: name, gstOn: gstOn, fyId: fyId, fyLabel: fyLabel });
+        _send('setActiveSociety', { societyId: societyId, code: code, name: name, gstOn: gstOn, fyId: fyId, fyLabel: fyLabel, isPrimary: isPrimary });
       }
+    },
+    showViewOnlyModal: function(societyName) {
+      _send('showViewOnlyModal', { societyName: societyName });
     },
     setActiveFY: function(fyId, fyLabel, fyStart, fyEnd) {
       _send('setActiveFY', { fyId: fyId, fyLabel: fyLabel, fyStart: fyStart, fyEnd: fyEnd });

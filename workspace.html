@@ -611,7 +611,7 @@
         <span>HENU ERP</span>
       </div>
 
-      <div class="erp-soc-header-badge" onclick="toggleSocietyPicker()" style="cursor:pointer;" title="Click to switch Active Society">
+      <div class="erp-soc-header-badge" onclick="toggleSocietyPicker()" style="cursor:pointer;" title="Click to switch Viewing Society">
         <i class="bi bi-building"></i>
         <span id="topSocietyName">HENU SOCIETY</span>
         <i class="bi bi-chevron-down" style="font-size: 10px; margin-left: 2px;"></i>
@@ -705,7 +705,10 @@
   <div class="fy-modal-overlay" id="socPickerModal" onclick="closeSocietyPicker(event)">
     <div class="fy-modal-container" onclick="event.stopPropagation()">
       <div class="fy-modal-header">
-        <h3><i class="bi bi-building"></i> SELECT ACTIVE SOCIETY</h3>
+        <div>
+          <h3><i class="bi bi-building"></i> SWITCH SOCIETY (VIEW RECORDS)</h3>
+          <div style="font-size:11px; color:#E2E8F0; margin-top:2px; font-weight:normal;">Select a society to inspect its records & reports. To activate for editing, switch from Society Master.</div>
+        </div>
         <i class="bi bi-x-lg fy-modal-close" onclick="closeSocietyPicker()"></i>
       </div>
       <div class="fy-modal-body" id="socModalList">
@@ -713,6 +716,37 @@
       </div>
       <div class="fy-modal-footer">
         <button class="cmd-btn" onclick="closeSocietyPicker()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SOFTWARE DESIGNED VIEW-ONLY WARNING MODAL ───────────── -->
+  <div class="fy-modal-overlay" id="viewOnlyAlertModal" onclick="closeViewOnlyModal(event)">
+    <div class="fy-modal-container" style="max-width:460px;" onclick="event.stopPropagation()">
+      <div class="fy-modal-header" style="background:#B45309; border-bottom:2px solid #92400E;">
+        <h3 style="color:#FFF;"><i class="bi bi-shield-lock-fill" style="color:#FDE68A; margin-right:6px;"></i> READ-ONLY VIEW MODE</h3>
+        <i class="bi bi-x-lg fy-modal-close" onclick="closeViewOnlyModal()"></i>
+      </div>
+      <div class="fy-modal-body" style="padding:20px; font-size:13px; color:#1E293B; line-height:1.5;">
+        <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px;">
+          <div style="width:40px; height:40px; border-radius:50%; background:#FEF3C7; color:#D97706; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0;">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:14px; color:#92400E; margin-bottom:4px;">Action Not Allowed in View Mode</div>
+            <div>You are viewing entries for <strong id="viewOnlySocName" style="color:#0F172A;">this society</strong> in <strong>View-Only</strong> mode.</div>
+          </div>
+        </div>
+        <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:12px; margin-bottom:6px; font-size:12px; color:#475569;">
+          <div><i class="bi bi-check-circle-fill" style="color:#10B981; margin-right:4px;"></i> Active Society for Data Entry: <strong id="viewOnlyPrimarySocName" style="color:#1E293B;">—</strong></div>
+          <div style="margin-top:8px; line-height:1.4;">To add, edit, or delete any records in this society, you must officially switch to it from <strong>Society Master</strong>.</div>
+        </div>
+      </div>
+      <div class="fy-modal-footer" style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="cmd-btn" onclick="goToSocietyMasterFromModal()" style="background:#1565C0; color:#FFF; font-weight:bold;">
+          <i class="bi bi-arrow-right-circle"></i> Switch in Society Master
+        </button>
+        <button class="cmd-btn" onclick="closeViewOnlyModal()">Close</button>
       </div>
     </div>
   </div>
@@ -755,15 +789,27 @@
         userName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || 'ADMIN';
       }
 
+      const isViewOnly = (window.Auth && typeof Auth.isViewOnly === 'function')
+        ? Auth.isViewOnly()
+        : (() => {
+            const pId = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+            const cId = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+            return !!(pId && cId && String(pId) !== String(cId));
+          })();
+
       const topSoc = document.getElementById('topSocietyName');
-      if (topSoc) topSoc.textContent = socName;
+      if (topSoc) {
+        topSoc.innerHTML = isViewOnly
+          ? `${socName} <span style="margin-left:6px; font-size:10px; background:#F59E0B; color:#000; padding:1px 6px; border-radius:3px; font-weight:bold;">VIEW ONLY</span>`
+          : `${socName} <span style="margin-left:6px; font-size:10px; background:#10B981; color:#fff; padding:1px 6px; border-radius:3px; font-weight:bold;">ACTIVE</span>`;
+      }
       const topFY = document.getElementById('topFYLabel');
       if (topFY) topFY.textContent = fyLabel;
       const topUser = document.getElementById('topUser');
       if (topUser) topUser.textContent = userName;
 
       const sbSoc = document.getElementById('sbSocName');
-      if (sbSoc) sbSoc.textContent = socName;
+      if (sbSoc) sbSoc.textContent = isViewOnly ? `${socName} [VIEW ONLY]` : socName;
       const sbFY = document.getElementById('sbFYLabel');
       if (sbFY) sbFY.textContent = fyLabel;
       const sbUser = document.getElementById('sbUserName');
@@ -777,6 +823,15 @@
 
     (function () {
       if (!Auth.requireContext()) return;
+      const socId = Auth.getSocietyId();
+      if (socId && !sessionStorage.getItem('primaryActiveSocietyId')) {
+        sessionStorage.setItem('primaryActiveSocietyId', String(socId));
+        localStorage.setItem('primaryActiveSocietyId', String(socId));
+        sessionStorage.setItem('primaryActiveSocietyCode', Auth.getSocietyCode() || '');
+        localStorage.setItem('primaryActiveSocietyCode', Auth.getSocietyCode() || '');
+        sessionStorage.setItem('primaryActiveSocietyName', Auth.getSocietyName() || '');
+        localStorage.setItem('primaryActiveSocietyName', Auth.getSocietyName() || '');
+      }
       updateHeaderAndFooterContext();
     })();
 
@@ -850,21 +905,40 @@
         if (res && res.data && res.data.length > 0) {
           const list = res.data;
           const currentSocId = String(Auth.getSocietyId() || '');
+          const primarySocId = String(Auth.getPrimarySocietyId() || currentSocId);
 
-          bodyEl.innerHTML = list.map(s => {
+          const bannerHtml = `
+            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:6px; padding:8px 12px; margin-bottom:12px; font-size:11px; color:#1E40AF; line-height:1.4;">
+              <i class="bi bi-info-circle-fill" style="margin-right:4px;"></i>
+              Select any society to view its entries, reports & accounts in <strong>View-Only</strong> mode.
+              To activate a society for making changes, switch from <strong>Society Master</strong>.
+            </div>
+          `;
+
+          bodyEl.innerHTML = bannerHtml + list.map(s => {
             const sId = String(s.societyId || s.SocietyId || '');
             const sName = s.societyName || s.SocietyName || '';
             const sCode = s.societyCode || s.SocietyCode || '';
             const isGst = (s.gstApplicable === true || s.GSTApplicable === true || s.gstApplicable === 'Y' || s.GSTApplicable === 'Y');
-            const isActive = (sId === currentSocId);
+            const isCurrentViewing = (sId === currentSocId);
+            const isPrimaryActive = (sId === primarySocId);
+
+            let badgeHtml = '';
+            if (isPrimaryActive && isCurrentViewing) {
+              badgeHtml = '<span class="fy-card-badge current" style="background:#10B981; color:#fff;">ACTIVE</span>';
+            } else if (isPrimaryActive) {
+              badgeHtml = '<span class="fy-card-badge" style="background:#059669; color:#fff;">ACTIVE (IN MASTER)</span>';
+            } else if (isCurrentViewing) {
+              badgeHtml = '<span class="fy-card-badge" style="background:#F59E0B; color:#000;">VIEWING ONLY</span>';
+            }
 
             return `
-              <div class="fy-card-item ${isActive ? 'active-fy' : ''}" onclick="selectSocietyFromModal(${sId}, '${sCode.replace(/'/g, "\\'")}', '${sName.replace(/'/g, "\\'")}', ${isGst})">
+              <div class="fy-card-item ${isCurrentViewing ? 'active-fy' : ''}" onclick="selectSocietyFromModal(${sId}, '${sCode.replace(/'/g, "\\'")}', '${sName.replace(/'/g, "\\'")}', ${isGst})">
                 <div class="fy-card-left">
                   <div class="fy-card-label">
-                    <i class="bi ${isActive ? 'bi-check-circle-fill' : 'bi-building'}" style="color:${isActive ? '#1565C0' : '#64748b'};"></i>
+                    <i class="bi ${isCurrentViewing ? 'bi-check-circle-fill' : 'bi-building'}" style="color:${isCurrentViewing ? '#1565C0' : '#64748b'};"></i>
                     ${sName} (${sCode})
-                    ${isActive ? '<span class="fy-card-badge current">ACTIVE</span>' : ''}
+                    ${badgeHtml}
                   </div>
                   <div class="fy-card-dates">City: ${s.city || '—'} | Reg: ${s.registrationNo || '—'}</div>
                 </div>
@@ -888,10 +962,26 @@
       if (modal) modal.classList.remove('show');
     }
 
+    function closeViewOnlyModal(e) {
+      if (e && e.target && e.target.id !== 'viewOnlyAlertModal' && !e.target.classList.contains('fy-modal-close') && e.target.tagName !== 'BUTTON') {
+        return;
+      }
+      const modal = document.getElementById('viewOnlyAlertModal');
+      if (modal) modal.classList.remove('show');
+    }
+
+    function goToSocietyMasterFromModal() {
+      closeViewOnlyModal();
+      if (window.WorkspaceManager && typeof WorkspaceManager.openModule === 'function') {
+        WorkspaceManager.openModule('society-master');
+      }
+    }
+
     function selectSocietyFromModal(societyId, code, name, gstOn) {
       closeSocietyPicker();
       if (window.WorkspaceManager && typeof WorkspaceManager.setActiveSociety === 'function') {
-        WorkspaceManager.setActiveSociety(societyId, code, name, gstOn);
+        // Dropdown selection is a viewing switch (isPrimary = false)
+        WorkspaceManager.setActiveSociety(societyId, code, name, gstOn, null, null, false);
       }
       updateHeaderAndFooterContext();
     }

@@ -257,8 +257,36 @@ function gmOnMainGroupChange() {
   }
 }
 
+function gmCheckViewOnly() {
+  const isViewOnly = (typeof Auth !== 'undefined' && typeof Auth.isViewOnly === 'function')
+    ? Auth.isViewOnly()
+    : (() => {
+        const prim = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+        const curr = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+        return !!(prim && curr && String(prim) !== String(curr));
+      })();
+
+  if (isViewOnly) {
+    const socName = (typeof Auth !== 'undefined' && Auth.getSocietyName)
+      ? Auth.getSocietyName()
+      : (sessionStorage.getItem('activeSocietyName') || 'this society');
+
+    if (typeof WorkspaceBridge !== 'undefined' && WorkspaceBridge.showViewOnlyModal) {
+      WorkspaceBridge.showViewOnlyModal(socName);
+    } else if (window.parent && window.parent.WorkspaceManager && window.parent.WorkspaceManager.showViewOnlyModal) {
+      window.parent.WorkspaceManager.showViewOnlyModal(socName);
+    } else {
+      alert(`[READ-ONLY VIEW MODE]\n\nYou are viewing "${socName}" in View-Only mode.\nTo make changes or create entries, please switch to this society from Society Master.`);
+    }
+    return true;
+  }
+  return false;
+}
+
 // ── ADD ───────────────────────────────────────────────────
 function gmAdd() {
+  if (gmCheckViewOnly()) return;
+
   gmSelectedId = 0;
   setVal('gm-edit-id', '0');
   const codeInput = document.getElementById('gm-code');
@@ -278,6 +306,8 @@ function gmAdd() {
 
 // ── ALTER ─────────────────────────────────────────────────
 function gmAlter() {
+  if (gmCheckViewOnly()) return;
+
   if (!gmSelectedId) {
     gmAlert('Select a group from the list first.', true);
     return;
@@ -317,6 +347,8 @@ function getAuthHeaders() {
 
 // ── DELETE ────────────────────────────────────────────────
 async function gmDelete() {
+  if (gmCheckViewOnly()) return;
+
   if (gmMultiMode) {
     gmExecuteMultiDelete();
     return;
@@ -356,6 +388,8 @@ async function gmDelete() {
 
 // ── SAVE (Create or Update) ───────────────────────────────
 async function gmSave() {
+  if (gmCheckViewOnly()) return;
+
   const name   = val('gm-name').trim();
   const mainId = parseInt(val('gm-mainid')) || 0;
   let code     = val('gm-code').trim();

@@ -329,6 +329,43 @@ const WorkspaceManager = (() => {
           });
         }
       }
+      // View-only banner handling inside child iframe
+      const isViewOnly = (window.Auth && typeof window.Auth.isViewOnly === 'function')
+        ? window.Auth.isViewOnly()
+        : (() => {
+            const pId = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+            const cId = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+            return !!(pId && cId && String(pId) !== String(cId));
+          })();
+
+      let banner = doc.getElementById('erpViewOnlyBanner');
+      if (isViewOnly) {
+        if (!banner) {
+          banner = doc.createElement('div');
+          banner.id = 'erpViewOnlyBanner';
+          banner.style.cssText = 'background:#FFFBEB; border-bottom:1px solid #FCD34D; padding:6px 14px; font-size:11px; font-weight:600; color:#92400E; display:flex; align-items:center; justify-content:space-between; z-index:99999; flex-shrink:0;';
+          banner.innerHTML = `
+            <span><i class="bi bi-eye-fill" style="margin-right:6px; color:#D97706;"></i> VIEW-ONLY MODE: You are viewing records for <strong class="vo-banner-name">${socName}</strong>. To make changes, switch society from Society Master.</span>
+            <button type="button" style="background:#D97706; color:#fff; border:none; padding:3px 10px; border-radius:4px; font-size:10px; cursor:pointer; font-weight:bold;">Switch in Society Master ➔</button>
+          `;
+          const btn = banner.querySelector('button');
+          if (btn) {
+            btn.onclick = function () {
+              if (window.WorkspaceManager && typeof window.WorkspaceManager.openModule === 'function') {
+                window.WorkspaceManager.openModule('society-master');
+              } else if (window.parent && window.parent.WorkspaceManager) {
+                window.parent.WorkspaceManager.openModule('society-master');
+              }
+            };
+          }
+          if (doc.body) doc.body.insertBefore(banner, doc.body.firstChild);
+        } else {
+          const strongEl = banner.querySelector('.vo-banner-name');
+          if (strongEl) strongEl.textContent = socName;
+        }
+      } else if (banner) {
+        banner.remove();
+      }
     } catch (e) { }
   }
 
@@ -378,19 +415,55 @@ const WorkspaceManager = (() => {
     const sbFY = document.getElementById('sbFYLabel');
     if (sbFY) sbFY.textContent = fyLabel;
 
+    const topFY = document.getElementById('topFYLabel');
+    if (topFY) topFY.textContent = fyLabel;
+
     const frame = document.getElementById('moduleFrame');
     if (frame) injectSocietyContextToFrame(frame);
+
+    if (activeTabId) {
+      loadModuleFrame(activeTabId);
+    }
   }
 
-  function setActiveSociety(arg1, arg2, arg3, arg4, arg5, arg6) {
+  function updateTopSocietyUI(name, isViewOnly) {
+    const topSoc = document.getElementById('topSocietyName');
+    if (topSoc && name) {
+      topSoc.innerHTML = isViewOnly
+        ? `${escHtmlWs(name)} <span class="erp-soc-mode-tag view-only" style="margin-left:6px; font-size:10px; background:#F59E0B; color:#000; padding:1px 6px; border-radius:3px; font-weight:bold;">VIEW ONLY</span>`
+        : `${escHtmlWs(name)} <span class="erp-soc-mode-tag active" style="margin-left:6px; font-size:10px; background:#10B981; color:#fff; padding:1px 6px; border-radius:3px; font-weight:bold;">ACTIVE</span>`;
+    }
+
+    const sbSoc = document.getElementById('sbSocName');
+    if (sbSoc && name) {
+      sbSoc.textContent = isViewOnly ? `${name} [VIEW ONLY]` : name;
+    }
+
+    const sideSoc = document.getElementById('sideSocSub');
+    if (sideSoc && name) sideSoc.textContent = name;
+
+    const sideProfile = document.getElementById('sideProfileSocName');
+    if (sideProfile && name) sideProfile.textContent = name;
+  }
+
+  function setActiveSociety(arg1, arg2, arg3, arg4, arg5, arg6, isPrimary = false) {
     let socId, code, name, gstOn, fyId, fyLabel;
-    if (typeof arg1 === 'number' || (arg1 && !isNaN(parseInt(arg1, 10)) && typeof arg2 === 'string')) {
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      socId = parseInt(arg1.societyId || arg1.id, 10);
+      code = arg1.code;
+      name = arg1.name;
+      gstOn = arg1.gstOn;
+      fyId = arg1.fyId;
+      fyLabel = arg1.fyLabel;
+      isPrimary = arg1.isPrimary === true;
+    } else if (typeof arg1 === 'number' || (arg1 && !isNaN(parseInt(arg1, 10)) && typeof arg2 === 'string')) {
       socId = parseInt(arg1, 10);
       code = arg2;
       name = arg3;
       gstOn = arg4;
       fyId = arg5;
       fyLabel = arg6;
+      if (typeof isPrimary !== 'boolean' && typeof arg6 === 'boolean') isPrimary = arg6;
     } else {
       code = arg1;
       name = arg2;
@@ -398,6 +471,7 @@ const WorkspaceManager = (() => {
       fyId = arg4;
       fyLabel = arg5;
       socId = parseInt(sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || '0', 10);
+      if (typeof isPrimary !== 'boolean' && typeof arg6 === 'boolean') isPrimary = arg6;
     }
 
     const prevSocId = parseInt(sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || '0', 10);
@@ -418,61 +492,99 @@ const WorkspaceManager = (() => {
     sessionStorage.setItem('activeSocietyGSTApplicable', gstFlag);
     localStorage.setItem('activeSocietyGSTApplicable', gstFlag);
 
+    // Primary Active Society handling — ONLY updated when isPrimary === true (from Society Master or login)
+    if (isPrimary === true) {
+      if (socId > 0) {
+        sessionStorage.setItem('primaryActiveSocietyId', String(socId));
+        localStorage.setItem('primaryActiveSocietyId', String(socId));
+      }
+      if (code) {
+        sessionStorage.setItem('primaryActiveSocietyCode', code);
+        localStorage.setItem('primaryActiveSocietyCode', code);
+      }
+      if (name) {
+        sessionStorage.setItem('primaryActiveSocietyName', name);
+        localStorage.setItem('primaryActiveSocietyName', name);
+      }
+    }
+
     if (window.Auth && typeof window.Auth.setContext === 'function') {
       window.Auth.setContext({
         societyId: socId > 0 ? socId : undefined,
         societyCode: code,
         societyName: name
-      });
+      }, null, isPrimary);
     }
 
-    if (fyLabel) {
-      setActiveFY(fyId, fyLabel);
-    } else if (socId > 0 && socId !== prevSocId) {
-      const p = (window.API && API.get)
-        ? API.get('/api/financial-years?societyId=' + socId)
-        : fetch(((window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:5002/api') + '/financial-years?societyId=' + socId).then(r => r.json());
-      p.then(res => {
-          if (res && res.data && res.data.length > 0) {
-            const activeFy = res.data.find(f => f.isActive) || res.data[0];
-            setActiveFY(activeFy.fYId, activeFy.fYLabel, activeFy.fYStart, activeFy.fYEnd);
-          }
-        })
-        .catch(() => {});
-    }
+    // Determine if in View-Only mode:
+    const primId = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+    const isViewOnly = !!(primId && socId > 0 && String(primId) !== String(socId));
 
     window.currentSociety = {
       id: socId,
       code: code,
       name: name,
       GSTApplicable: gstFlag,
-      year: sessionStorage.getItem('activeFYLabel') || localStorage.getItem('activeFYLabel') || '2025-26'
+      year: sessionStorage.getItem('activeFYLabel') || localStorage.getItem('activeFYLabel') || '2025-26',
+      isViewOnly: isViewOnly
     };
 
-    const topSoc = document.getElementById('topSocietyName');
-    if (topSoc && name) topSoc.textContent = name;
+    updateTopSocietyUI(name, isViewOnly);
 
-    const sbSoc = document.getElementById('sbSocName');
-    if (sbSoc && name) sbSoc.textContent = name;
+    // Handle Financial Year auto-fetch cleanly so valid fyId is always attached
+    const validFyId = fyId && !isNaN(parseInt(fyId, 10)) && String(fyId) !== 'false' && fyId !== false;
+    if (fyLabel && validFyId) {
+      setActiveFY(parseInt(fyId, 10), fyLabel);
+      if (activeTabId) loadModuleFrame(activeTabId);
+    } else if (socId > 0) {
+      const p = (window.API && API.get)
+        ? API.get('/api/financial-years?societyId=' + socId)
+        : fetch(((window.APP_CONFIG && window.APP_CONFIG.API_BASE) || 'http://localhost:5002/api') + '/financial-years?societyId=' + socId).then(r => r.json());
 
-    const sideSoc = document.getElementById('sideSocSub');
-    if (sideSoc && name) sideSoc.textContent = name;
-
-    const sideProfile = document.getElementById('sideProfileSocName');
-    if (sideProfile && name) sideProfile.textContent = name;
-
-    // Purge tabs from previous society if society changed
-    if (socId > 0 && prevSocId > 0 && socId !== prevSocId) {
-      openTabs = [];
-      activeTabId = null;
-      renderTabBar();
-      showDashboard();
+      p.then(res => {
+          if (res && res.data && res.data.length > 0) {
+            const activeFy = res.data.find(f => f.isActive) || res.data[0];
+            setActiveFY(activeFy.fYId, activeFy.fYLabel, activeFy.fYStart, activeFy.fYEnd);
+          } else {
+            setActiveFY(1, '2025-2026', '2025-04-01', '2026-03-31');
+          }
+          if (activeTabId) {
+            loadModuleFrame(activeTabId);
+          }
+        })
+        .catch(() => {
+          if (activeTabId) loadModuleFrame(activeTabId);
+        });
     } else {
-      const frame = document.getElementById('moduleFrame');
-      if (frame) injectSocietyContextToFrame(frame);
+      if (activeTabId) loadModuleFrame(activeTabId);
+    }
+
+    if (typeof window.updateHeaderAndFooterContext === 'function') {
+      window.updateHeaderAndFooterContext();
     }
 
     updateGstMenuVisibility();
+  }
+
+  function showViewOnlyModal(socName) {
+    const modal = document.getElementById('viewOnlyAlertModal');
+    const nameEl = document.getElementById('viewOnlySocName');
+    const primEl = document.getElementById('viewOnlyPrimarySocName');
+    const activeName = socName || sessionStorage.getItem('activeSocietyName') || 'this society';
+    const primaryName = sessionStorage.getItem('primaryActiveSocietyName') || localStorage.getItem('primaryActiveSocietyName') || 'the active society';
+
+    if (modal) {
+      if (nameEl) nameEl.textContent = activeName;
+      if (primEl) primEl.textContent = primaryName;
+      modal.classList.add('show');
+    } else {
+      alert(`[READ-ONLY VIEW MODE]\n\nYou are viewing "${activeName}" in View-Only mode.\nThe active society is "${primaryName}".\n\nTo create, edit, or delete any records in this society, please switch to it from "Society Master".`);
+    }
+  }
+
+  function closeViewOnlyModal() {
+    const modal = document.getElementById('viewOnlyAlertModal');
+    if (modal) modal.classList.remove('show');
   }
 
   function getModule(id) {
@@ -716,52 +828,11 @@ const WorkspaceManager = (() => {
     renderSidebar();
   }
 
-  function setActiveSociety(code, name, gstOn, fyId, fyLabel) {
-    if (typeof Auth !== 'undefined' && Auth.setContext) {
-      Auth.setContext({ societyCode: code, societyName: name }, { fYId: fyId, fYLabel: fyLabel });
-    }
-    if (name) {
-      sessionStorage.setItem('activeSocietyName', name);
-      localStorage.setItem('activeSocietyName', name);
-    }
-    if (code) {
-      sessionStorage.setItem('activeSocietyCode', code);
-      localStorage.setItem('activeSocietyCode', code);
-    }
-    if (fyLabel) {
-      sessionStorage.setItem('activeFYLabel', fyLabel);
-      localStorage.setItem('activeFYLabel', fyLabel);
-    }
-    if (fyId) {
-      sessionStorage.setItem('activeFYId', fyId);
-      localStorage.setItem('activeFYId', fyId);
-    }
-
-    if (typeof window.updateHeaderAndFooterContext === 'function') {
-      window.updateHeaderAndFooterContext();
-    }
-    if (activeTabId) {
-      loadModuleFrame(activeTabId);
-    }
-  }
-
-  function setActiveFY(fyId, fyLabel, fyStart, fyEnd) {
-    if (typeof Auth !== 'undefined' && Auth.setFY) {
-      Auth.setFY({ fYId: fyId, fYLabel: fyLabel, fYStart: fyStart, fYEnd: fyEnd });
-    } else {
-      sessionStorage.setItem('activeFYId', fyId);
-      sessionStorage.setItem('activeFYLabel', fyLabel);
-      localStorage.setItem('activeFYId', fyId);
-      localStorage.setItem('activeFYLabel', fyLabel);
-    }
-
-    if (typeof window.updateHeaderAndFooterContext === 'function') {
-      window.updateHeaderAndFooterContext();
-    }
-    if (activeTabId) {
-      loadModuleFrame(activeTabId);
-    }
-  }
+  // NOTE: setActiveSociety is defined once at line ~385 (proper implementation).
+  // NOTE: setActiveFY is defined once at line ~343 (proper implementation).
+  // DO NOT re-declare them here — JS hoists the last declaration, which
+  // was previously causing argument-mismatch bugs (societyId treated as code,
+  // gstOn boolean stored as fyId → "false" → HTTP 400 on all API calls).
 
   function purgeStaleStorageKeys() {
     try {
@@ -776,6 +847,19 @@ const WorkspaceManager = (() => {
 
   function init() {
     purgeStaleStorageKeys();
+
+    const currSoc = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+    if (currSoc && !sessionStorage.getItem('primaryActiveSocietyId')) {
+      sessionStorage.setItem('primaryActiveSocietyId', currSoc);
+      localStorage.setItem('primaryActiveSocietyId', currSoc);
+      const code = sessionStorage.getItem('activeSocietyCode') || localStorage.getItem('activeSocietyCode') || '';
+      const name = sessionStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyName') || '';
+      sessionStorage.setItem('primaryActiveSocietyCode', code);
+      localStorage.setItem('primaryActiveSocietyCode', code);
+      sessionStorage.setItem('primaryActiveSocietyName', name);
+      localStorage.setItem('primaryActiveSocietyName', name);
+    }
+
     showDashboard();
     syncActiveSocietyGST();
   }
@@ -789,6 +873,10 @@ const WorkspaceManager = (() => {
     const payload = data.payload || {};
 
     switch (action) {
+      case 'showViewOnlyModal':
+      case 'showViewOnlyPopup':
+        showViewOnlyModal(payload.societyName);
+        break;
       case 'closeTab':
         if (payload.tabId || payload.moduleId) {
           closeTab(payload.tabId || payload.moduleId);
@@ -801,7 +889,7 @@ const WorkspaceManager = (() => {
         }
         break;
       case 'setActiveSociety':
-        setActiveSociety(payload.societyId || payload.id, payload.code, payload.name, payload.gstOn, payload.fyId, payload.fyLabel);
+        setActiveSociety(payload.societyId || payload.id, payload.code, payload.name, payload.gstOn, payload.fyId, payload.fyLabel, payload.isPrimary === true);
         break;
       case 'setActiveFY':
         setActiveFY(payload.fyId, payload.fyLabel, payload.fyStart, payload.fyEnd);
@@ -825,7 +913,10 @@ const WorkspaceManager = (() => {
     closeTab,
     setActiveSociety,
     setActiveFY,
-    updateGstMenuVisibility
+    updateGstMenuVisibility,
+    showViewOnlyModal,
+    closeViewOnlyModal,
+    isViewOnly: () => (window.Auth && typeof window.Auth.isViewOnly === 'function') ? window.Auth.isViewOnly() : false
   };
 
 })();

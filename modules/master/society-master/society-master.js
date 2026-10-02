@@ -433,22 +433,32 @@ function smOpenWorkspace(code, name) {
     if (socId) {
       localStorage.setItem('activeSocietyId', socId);
       sessionStorage.setItem('activeSocietyId', socId);
+      localStorage.setItem('primaryActiveSocietyId', socId);
+      sessionStorage.setItem('primaryActiveSocietyId', socId);
+    }
+    localStorage.setItem('primaryActiveSocietyCode', code);
+    sessionStorage.setItem('primaryActiveSocietyCode', code);
+    localStorage.setItem('primaryActiveSocietyName', name);
+    sessionStorage.setItem('primaryActiveSocietyName', name);
+
+    if (typeof Auth !== 'undefined' && Auth.setPrimaryContext) {
+      Auth.setPrimaryContext({ societyId: socId ? parseInt(socId, 10) : null, societyCode: code, societyName: name });
     }
 
     if (typeof WorkspaceBridge !== 'undefined') {
-      WorkspaceBridge.setActiveSociety(socId ? parseInt(socId, 10) : null, code, name, gstOn);
+      WorkspaceBridge.setActiveSociety(socId ? parseInt(socId, 10) : null, code, name, gstOn, null, null, true);
     } else if (window.parent && window.parent !== window) {
       window.parent.postMessage({
         type: 'JEEVIKA_WORKSPACE_CMD',
         action: 'setActiveSociety',
-        payload: { societyId: socId ? parseInt(socId, 10) : null, code: code, name: name, gstOn: gstOn }
+        payload: { societyId: socId ? parseInt(socId, 10) : null, code: code, name: name, gstOn: gstOn, isPrimary: true }
       }, '*');
     }
 
     const socSpan = document.querySelector('.sm-soc-span');
     if (socSpan) socSpan.textContent = `${name} (${code})`;
 
-    smAlert(`Switched active workspace to: <b>${name}</b>`);
+    smAlert(`Activated workspace: <b>${name}</b> for data entry and changes.`);
   };
 
   if (code !== current) {

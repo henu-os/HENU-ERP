@@ -6,7 +6,28 @@
 (function () {
   'use strict';
 
-  let isGstEnabled = false;
+  function checkInitialGst() {
+    const flag = sessionStorage.getItem('activeSocietyGSTApplicable') || localStorage.getItem('activeSocietyGSTApplicable');
+    if (flag === 'Y' || flag === 'true' || flag === '1') return true;
+    return false;
+  }
+  let isGstEnabled = checkInitialGst();
+
+  function btmCheckViewOnly() {
+    const primId = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+    const actId = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+    if (primId && actId && String(primId) !== String(actId)) {
+      const socName = sessionStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyName') || 'this society';
+      if (typeof WorkspaceBridge !== 'undefined' && WorkspaceBridge.showViewOnlyModal) {
+        WorkspaceBridge.showViewOnlyModal(socName);
+      } else if (window.parent && window.parent.WorkspaceManager && window.parent.WorkspaceManager.showViewOnlyModal) {
+        window.parent.WorkspaceManager.showViewOnlyModal(socName);
+      }
+      return true;
+    }
+    return false;
+  }
+
   let currentType = 'Maintenance';
   let currentTypeId = 1;
   let targetRowIdx = -1;
@@ -276,7 +297,15 @@
       else tbl.classList.remove('gst-on');
 
       const badge = document.getElementById('btm-gst-badge');
-      if (badge) badge.textContent = isGstEnabled ? '✔ GST Enabled' : '';
+      if (badge) {
+        if (isGstEnabled) {
+          badge.textContent = '✔ GST Enabled';
+          badge.style.color = '#2E7D32';
+        } else {
+          badge.textContent = 'Non-GST Society (GST View-Only)';
+          badge.style.color = '#757575';
+        }
+      }
     },
 
     toggleOtherMenu: function (e) {
@@ -369,6 +398,7 @@
     },
 
     addType: async function () {
+      if (btmCheckViewOnly()) return;
       const name = document.getElementById('btm-new-name').value.trim();
       const desc = document.getElementById('btm-new-desc').value.trim();
 
@@ -466,18 +496,25 @@
         // ── VIEW 1: TOGGLE IS OFF (FULL-WIDTH EXPANDED VIEW - IMAGE 1 DESIGN) ──
         if (tbl) tbl.classList.add('detailed-view');
         const instrEl = document.getElementById('btm-instruction-text');
-        if (instrEl) instrEl.innerHTML = 'Configure bill heads, display names, GST categories and threshold applicability. Use <b>↑ / ↓</b> to reorder rows.';
+        if (instrEl) {
+          if (isGstEnabled) {
+            instrEl.innerHTML = 'Configure bill heads, display names, GST categories and threshold applicability. Use <b>↑ / ↓</b> to reorder rows.';
+          } else {
+            instrEl.innerHTML = 'Configure bill heads and display names. GST is not applicable for this society (view-only). Use <b>↑ / ↓</b> to reorder rows.';
+          }
+        }
         if (theadRow) {
+          const gstThClass = !isGstEnabled ? ' class="td-center btm-gst-disabled-th" title="GST configuration is disabled for Non-GST societies"' : ' class="td-center"';
           theadRow.innerHTML = `
             <th style="width:45px;" class="td-center">Sr. No.</th>
             <th style="width:95px;" class="th-left">Account Code</th>
             <th class="th-left" style="min-width:140px;">Account Head<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Ledger Name)</span></th>
             <th class="th-left" style="min-width:140px;">Display Name<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(On Bill)</span></th>
-            <th style="width:130px;" class="td-center">GST Category</th>
-            <th style="width:125px;" class="td-center">Include in ₹7,500<br>Threshold ?</th>
-            <th style="width:75px;" class="td-center">GST Rate<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Default 18%)</span></th>
-            <th style="width:70px;" class="td-center">CGST Rate<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Default 9%)</span></th>
-            <th style="width:70px;" class="td-center">SGST Rate<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Default 9%)</span></th>
+            <th style="width:130px;"${gstThClass}>GST Category</th>
+            <th style="width:125px;"${gstThClass}>Include in ₹7,500<br>Threshold ?</th>
+            <th style="width:75px;"${gstThClass}>GST Rate<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Default 18%)</span></th>
+            <th style="width:70px;"${gstThClass}>CGST Rate<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Default 9%)</span></th>
+            <th style="width:70px;"${gstThClass}>SGST Rate<br><span style="font-size:9.5px; font-weight:normal; opacity:0.85;">(Default 9%)</span></th>
             <th style="width:65px;" class="td-center">Reorder</th>
             <th style="width:75px;" class="td-center">Action</th>
           `;
@@ -492,26 +529,55 @@
 
           const dispVal = escapeHtml(h.displayName || h.accName || '');
           let cat = h.gstCategory;
-          if (!cat) {
+          if (!isGstEnabled) {
+            cat = 'Non-GST';
+          } else if (!cat) {
             if (h.gstApp && h.gstExm) cat = 'Both (Exempt & Applicable)';
             else if (h.gstApp) cat = 'GST Applicable';
             else if (h.gstExm) cat = 'Exempt';
             else cat = 'Non-GST';
             h.gstCategory = cat;
           }
-          const isBoth = (cat === 'Both (Exempt & Applicable)' || cat === 'Both');
-          const isTaxable = (cat === 'GST Applicable' || isBoth);
+          const isBoth = isGstEnabled && (cat === 'Both (Exempt & Applicable)' || cat === 'Both');
+          const isTaxable = isGstEnabled && (cat === 'GST Applicable' || isBoth);
           const catClass = isBoth ? 'cat-both' : (cat === 'GST Applicable' ? 'cat-gst' : (cat === 'Exempt' ? 'cat-exempt' : 'cat-nongst'));
-          const incThresh = (h.includeThreshold !== undefined) ? !!h.includeThreshold : (cat === 'Exempt' || isBoth);
+          const incThresh = isGstEnabled ? ((h.includeThreshold !== undefined) ? !!h.includeThreshold : (cat === 'Exempt' || isBoth)) : false;
 
           html += '<tr class="' + rowClass + '" draggable="' + (!isFixed) + '" ondragstart="BTM.dragStart(event, ' + idx + ')" ondragover="BTM.dragOver(event)" ondrop="BTM.drop(event, ' + idx + ')">';
           html += '<td class="td-center" style="font-weight:bold; cursor:' + (isFixed ? 'default' : 'grab') + ';">' + (idx + 1) + '</td>';
           html += '<td style="font-family:monospace; font-size:11px; color:#424242; font-weight:600;">' + (h.accCode || '—') + '</td>';
           html += '<td style="font-weight:' + (isFixed ? 'bold' : '600') + '; color:' + (isGST ? '#E65100' : (isInterest ? '#1565C0' : '#263238')) + ';">' + (h.accName || '<span style="color:#BDBDBD; font-weight:normal; font-style:italic;">(Click Edit to assign)</span>') + '</td>';
 
+          // Display Name
           if (!isFixed) {
             html += '<td><input type="text" class="btm-disp-input" value="' + dispVal + '" onchange="BTM.updateDisplayName(' + idx + ', this.value)" placeholder="Enter name on bill..."></td>';
-            html += '<td class="td-center">';
+          } else {
+            html += '<td><span style="font-size:11px; color:#616161; font-weight:500;">' + (h.displayName || h.accName || '') + '</span></td>';
+          }
+
+          // GST Category, Threshold, Rates (Columns 5 through 9)
+          const gstCellClass = !isGstEnabled ? 'td-center btm-gst-disabled-cell' : 'td-center';
+          const gstCellTitle = !isGstEnabled ? ' title="GST configuration is disabled for Non-GST societies"' : '';
+
+          if (!isGstEnabled) {
+            // Non-GST Society: Read-only, disabled and visually blurred
+            html += '<td class="' + gstCellClass + '"' + gstCellTitle + '>';
+            html += '  <select class="btm-gst-cat-select cat-nongst" disabled tabindex="-1">';
+            html += '    <option value="Non-GST" selected>Non-GST</option>';
+            html += '  </select>';
+            html += '</td>';
+
+            html += '<td class="' + gstCellClass + '"' + gstCellTitle + '>';
+            html += '  <span class="btm-thresh-badge no" tabindex="-1">No</span>';
+            html += '</td>';
+
+            html += '<td class="' + gstCellClass + '"' + gstCellTitle + '><span class="btm-rate-pill">0%</span></td>';
+            html += '<td class="' + gstCellClass + '"' + gstCellTitle + '><span class="btm-rate-pill">0%</span></td>';
+            html += '<td class="' + gstCellClass + '"' + gstCellTitle + '><span class="btm-rate-pill">0%</span></td>';
+
+          } else if (!isFixed) {
+            // GST Society: Editable and Interactive
+            html += '<td class="' + gstCellClass + '">';
             html += '  <select class="btm-gst-cat-select ' + catClass + '" onchange="BTM.setGstCategory(' + idx + ', this.value)">';
             html += '    <option value="Non-GST"' + (cat === 'Non-GST' ? ' selected' : '') + '>Non-GST</option>';
             html += '    <option value="Exempt"' + (cat === 'Exempt' ? ' selected' : '') + '>Exempt</option>';
@@ -519,20 +585,24 @@
             html += '    <option value="Both (Exempt & Applicable)"' + (isBoth ? ' selected' : '') + '>Both (Exempt &amp; Applicable)</option>';
             html += '  </select>';
             html += '</td>';
-            html += '<td class="td-center">';
+
+            html += '<td class="' + gstCellClass + '">';
             html += '  <span class="btm-thresh-badge ' + (incThresh ? 'yes' : 'no') + '" onclick="BTM.toggleThreshold(' + idx + ')" title="Click to toggle threshold">' + (incThresh ? 'Yes' : 'No') + '</span>';
             html += '</td>';
-          } else {
-            html += '<td><span style="font-size:11px; color:#616161; font-weight:500;">' + (h.displayName || h.accName || '') + '</span></td>';
-            html += '<td class="td-center"><span style="font-size:10.5px; font-weight:bold; color:#757575;">' + cat + '</span></td>';
-            html += '<td class="td-center"><span style="color:#9E9E9E; font-size:11px;">No</span></td>';
-          }
 
-          // Read-only Rates as requested: GST 18%, CGST 9%, SGST 9%
-          const rateTitle = isBoth ? ' title="18% if monthly maintenance exceeds ₹7,500 threshold, 0% if ≤ ₹7,500"' : '';
-          html += '<td class="td-center"><span class="btm-rate-pill"' + rateTitle + '>' + (isTaxable ? '18%' : '0%') + '</span></td>';
-          html += '<td class="td-center"><span class="btm-rate-pill"' + rateTitle + '>' + (isTaxable ? '9%' : '0%') + '</span></td>';
-          html += '<td class="td-center"><span class="btm-rate-pill"' + rateTitle + '>' + (isTaxable ? '9%' : '0%') + '</span></td>';
+            const rateTitle = isBoth ? ' title="18% if monthly maintenance exceeds ₹7,500 threshold, 0% if ≤ ₹7,500"' : '';
+            html += '<td class="' + gstCellClass + '"><span class="btm-rate-pill"' + rateTitle + '>' + (isTaxable ? '18%' : '0%') + '</span></td>';
+            html += '<td class="' + gstCellClass + '"><span class="btm-rate-pill"' + rateTitle + '>' + (isTaxable ? '9%' : '0%') + '</span></td>';
+            html += '<td class="' + gstCellClass + '"><span class="btm-rate-pill"' + rateTitle + '>' + (isTaxable ? '9%' : '0%') + '</span></td>';
+
+          } else {
+            // GST Society: Fixed Row (Interest / CGST / SGST)
+            html += '<td class="' + gstCellClass + '"><span style="font-size:10.5px; font-weight:bold; color:#757575;">' + cat + '</span></td>';
+            html += '<td class="' + gstCellClass + '"><span style="color:#9E9E9E; font-size:11px;">No</span></td>';
+            html += '<td class="' + gstCellClass + '"><span class="btm-rate-pill">' + (isTaxable ? '18%' : '0%') + '</span></td>';
+            html += '<td class="' + gstCellClass + '"><span class="btm-rate-pill">' + (isTaxable ? '9%' : '0%') + '</span></td>';
+            html += '<td class="' + gstCellClass + '"><span class="btm-rate-pill">' + (isTaxable ? '9%' : '0%') + '</span></td>';
+          }
 
           // Reorder buttons (Move up / down)
           if (!isFixed) {
@@ -612,6 +682,7 @@
     },
 
     setGstCategory: function (idx, cat) {
+      if (!isGstEnabled) return;
       if (!billTypes[currentType] || !billTypes[currentType].heads[idx]) return;
       const h = billTypes[currentType].heads[idx];
       h.gstCategory = cat;
@@ -638,6 +709,7 @@
     },
 
     toggleThreshold: function (idx) {
+      if (!isGstEnabled) return;
       if (!billTypes[currentType] || !billTypes[currentType].heads[idx]) return;
       const h = billTypes[currentType].heads[idx];
       h.includeThreshold = !h.includeThreshold;
@@ -674,6 +746,7 @@
     },
 
     setGST: function (idx, type, val) {
+      if (!isGstEnabled) return;
       if (!billTypes[currentType] || !billTypes[currentType].heads[idx]) return;
       const h = billTypes[currentType].heads[idx];
       if (type === 'app') {
@@ -1132,6 +1205,7 @@
     },
 
     deleteCurrentType: async function () {
+      if (btmCheckViewOnly()) return;
       if (currentType.trim().toLowerCase() === 'maintenance') {
         toast('Default "Maintenance" Bill Type cannot be deleted.', false);
         return;
@@ -1186,6 +1260,7 @@
     },
 
     saveAll: async function () {
+      if (btmCheckViewOnly()) return;
       if (!billTypes[currentType]) return;
 
       const tData = billTypes[currentType];
@@ -1218,24 +1293,24 @@
         billDue: tData.billDue || '15',
         billPeriod: tData.billPeriod || '',
         heads: tData.heads.map((h, idx) => {
-          let cat = h.gstCategory;
-          if (!cat) {
+          let cat = !isGstEnabled ? 'Non-GST' : (h.gstCategory || '');
+          if (isGstEnabled && !cat) {
             if (h.gstApp && h.gstExm) cat = 'Both (Exempt & Applicable)';
             else if (h.gstApp) cat = 'GST Applicable';
             else if (h.gstExm) cat = 'Exempt';
             else cat = 'Non-GST';
           }
-          const isBoth = (cat === 'Both (Exempt & Applicable)' || cat === 'Both');
+          const isBoth = isGstEnabled && (cat === 'Both (Exempt & Applicable)' || cat === 'Both');
           return {
             srNo: idx + 1,
             accountId: h.accountId,
             accCode: h.accCode,
             accName: h.accName,
             displayName: h.displayName || h.accName || '',
-            gstCategory: isBoth ? 'Both (Exempt & Applicable)' : cat,
-            includeThreshold: (h.includeThreshold !== undefined) ? !!h.includeThreshold : ((h.gstExm || isBoth) ? true : false),
-            gstApplicable: isBoth ? true : !!h.gstApp,
-            gstExempted: isBoth ? true : !!h.gstExm
+            gstCategory: !isGstEnabled ? 'Non-GST' : (isBoth ? 'Both (Exempt & Applicable)' : cat),
+            includeThreshold: !isGstEnabled ? false : ((h.includeThreshold !== undefined) ? !!h.includeThreshold : ((h.gstExm || isBoth) ? true : false)),
+            gstApplicable: !isGstEnabled ? false : (isBoth ? true : !!h.gstApp),
+            gstExempted: !isGstEnabled ? false : (isBoth ? true : !!h.gstExm)
           };
         })
       };
@@ -1396,18 +1471,20 @@
           if (nameLower === 'interest' || nameLower === 'cgst' || nameLower === 'sgst') {
             return;
           }
-          const gstApp = !!(h.gstApplicable || h.gstApp);
-          const gstExm = !!(h.gstExempted || h.gstExm);
-          let gstCat = h.gstCategory || '';
-          if (gstCat === 'Both (Exempt & Applicable)' || gstCat === 'Both' || (gstApp && gstExm)) {
-            gstCat = 'Both (Exempt & Applicable)';
-          } else if (!gstCat) {
-            if (gstApp) gstCat = 'GST Applicable';
-            else if (gstExm) gstCat = 'Exempt';
-            else gstCat = 'Non-GST';
+          const gstApp = gstOn ? !!(h.gstApplicable || h.gstApp) : false;
+          const gstExm = gstOn ? !!(h.gstExempted || h.gstExm) : false;
+          let gstCat = gstOn ? (h.gstCategory || '') : 'Non-GST';
+          if (gstOn) {
+            if (gstCat === 'Both (Exempt & Applicable)' || gstCat === 'Both' || (gstApp && gstExm)) {
+              gstCat = 'Both (Exempt & Applicable)';
+            } else if (!gstCat) {
+              if (gstApp) gstCat = 'GST Applicable';
+              else if (gstExm) gstCat = 'Exempt';
+              else gstCat = 'Non-GST';
+            }
           }
-          const isBoth = (gstCat === 'Both (Exempt & Applicable)');
-          const incThresh = (h.includeThreshold !== undefined) ? !!h.includeThreshold : (gstCat === 'Exempt' || isBoth);
+          const isBoth = gstOn && (gstCat === 'Both (Exempt & Applicable)');
+          const incThresh = gstOn ? ((h.includeThreshold !== undefined) ? !!h.includeThreshold : (gstCat === 'Exempt' || isBoth)) : false;
 
           heads[slot] = {
             no: slot + 1,
@@ -1428,6 +1505,7 @@
   }
 
   async function loadConfig() {
+    isGstEnabled = checkInitialGst();
     // 1. Immediately render initial state synchronously so UI is never blank
     getActiveTypeObj();
     BTM.toggleGST(isGstEnabled);
@@ -1555,5 +1633,17 @@
   } else {
     loadConfig();
   }
+
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'activeSocietyId' || e.key === 'activeSocietyGSTApplicable') {
+      loadConfig();
+    }
+  });
+
+  window.addEventListener('message', function (e) {
+    if (e.data && (e.data.action === 'societyChanged' || e.data.action === 'refresh')) {
+      loadConfig();
+    }
+  });
 
 })();

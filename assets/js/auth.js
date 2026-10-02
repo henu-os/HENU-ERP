@@ -13,6 +13,9 @@ const Auth = (() => {
     SOC_ID:        'activeSocietyId',
     SOC_NAME:      'activeSocietyName',
     SOC_CODE:      'activeSocietyCode',
+    PRIMARY_SOC_ID:   'primaryActiveSocietyId',
+    PRIMARY_SOC_NAME: 'primaryActiveSocietyName',
+    PRIMARY_SOC_CODE: 'primaryActiveSocietyCode',
     FY_ID:         'activeFYId',
     FY_LABEL:      'activeFYLabel',
     FY_START:      'activeFYStart',
@@ -67,17 +70,41 @@ const Auth = (() => {
     },
 
     // ── Setup: store society + FY ────────────────────────
-    setContext(society, fy) {
+    setContext(society, fy, isPrimary = false) {
       if (society) {
         if (society.societyId) setStorageItem(KEYS.SOC_ID, society.societyId.toString());
         if (society.societyName) setStorageItem(KEYS.SOC_NAME, society.societyName);
         if (society.societyCode) setStorageItem(KEYS.SOC_CODE, society.societyCode);
+
+        // Only update primary society on explicit primary activation (from Society Master or login)
+        if (isPrimary) {
+          if (society.societyId) setStorageItem(KEYS.PRIMARY_SOC_ID, society.societyId.toString());
+          if (society.societyName) setStorageItem(KEYS.PRIMARY_SOC_NAME, society.societyName);
+          if (society.societyCode) setStorageItem(KEYS.PRIMARY_SOC_CODE, society.societyCode);
+        }
       }
       if (fy) {
         if (fy.fYId) setStorageItem(KEYS.FY_ID, fy.fYId.toString());
         if (fy.fYLabel) setStorageItem(KEYS.FY_LABEL, fy.fYLabel);
         if (fy.fYStart) setStorageItem(KEYS.FY_START, fy.fYStart);
         if (fy.fYEnd) setStorageItem(KEYS.FY_END, fy.fYEnd);
+      }
+    },
+
+    setPrimaryContext(society) {
+      if (society) {
+        if (society.societyId) {
+          setStorageItem(KEYS.PRIMARY_SOC_ID, society.societyId.toString());
+          setStorageItem(KEYS.SOC_ID, society.societyId.toString());
+        }
+        if (society.societyName) {
+          setStorageItem(KEYS.PRIMARY_SOC_NAME, society.societyName);
+          setStorageItem(KEYS.SOC_NAME, society.societyName);
+        }
+        if (society.societyCode) {
+          setStorageItem(KEYS.PRIMARY_SOC_CODE, society.societyCode);
+          setStorageItem(KEYS.SOC_CODE, society.societyCode);
+        }
       }
     },
 
@@ -91,15 +118,36 @@ const Auth = (() => {
     },
 
     // ── Getters ──────────────────────────────────────────
-    getToken()      { return getStorageItem(KEYS.TOKEN); },
-    getUserName()   { return getStorageItem(KEYS.USER_NAME) || ''; },
-    getUserType()   { return getStorageItem(KEYS.USER_TYPE) || ''; },
-    getSocietyId()  { return getStorageItem(KEYS.SOC_ID) || getStorageItem('activeSocietyId'); },
-    getSocietyName(){ return getStorageItem(KEYS.SOC_NAME) || getStorageItem('activeSocietyName') || '—'; },
-    getFYId()       { return getStorageItem(KEYS.FY_ID) || getStorageItem('activeFYId'); },
-    getFYLabel()    { return getStorageItem(KEYS.FY_LABEL) || getStorageItem('activeFYLabel') || '2025-26'; },
-    getFYStart()    { return getStorageItem(KEYS.FY_START); },
-    getFYEnd()      { return getStorageItem(KEYS.FY_END); },
+    getToken()            { return getStorageItem(KEYS.TOKEN); },
+    getUserName()         { return getStorageItem(KEYS.USER_NAME) || ''; },
+    getUserType()         { return getStorageItem(KEYS.USER_TYPE) || ''; },
+    getSocietyId()        {
+      const val = getStorageItem(KEYS.SOC_ID) || getStorageItem('activeSocietyId');
+      if (!val || val === 'false' || val === 'undefined' || val === 'null' || isNaN(parseInt(val, 10))) return null;
+      return val;
+    },
+    getSocietyName()      { return getStorageItem(KEYS.SOC_NAME) || getStorageItem('activeSocietyName') || '—'; },
+    getSocietyCode()      { return getStorageItem(KEYS.SOC_CODE) || getStorageItem('activeSocietyCode') || ''; },
+    getPrimarySocietyId() {
+      const val = getStorageItem(KEYS.PRIMARY_SOC_ID) || getStorageItem('primaryActiveSocietyId') || this.getSocietyId();
+      if (!val || val === 'false' || val === 'undefined' || val === 'null' || isNaN(parseInt(val, 10))) return null;
+      return val;
+    },
+    getPrimarySocietyName(){ return getStorageItem(KEYS.PRIMARY_SOC_NAME) || getStorageItem('primaryActiveSocietyName') || this.getSocietyName(); },
+    getPrimarySocietyCode(){ return getStorageItem(KEYS.PRIMARY_SOC_CODE) || getStorageItem('primaryActiveSocietyCode') || this.getSocietyCode(); },
+    isViewOnly() {
+      const primId = this.getPrimarySocietyId();
+      const currId = this.getSocietyId();
+      return !!(primId && currId && String(primId) !== String(currId));
+    },
+    getFYId()             {
+      const val = getStorageItem(KEYS.FY_ID) || getStorageItem('activeFYId');
+      if (!val || val === 'false' || val === 'undefined' || val === 'null' || isNaN(parseInt(val, 10))) return null;
+      return val;
+    },
+    getFYLabel()          { return getStorageItem(KEYS.FY_LABEL) || getStorageItem('activeFYLabel') || '2025-26'; },
+    getFYStart()          { return getStorageItem(KEYS.FY_START); },
+    getFYEnd()            { return getStorageItem(KEYS.FY_END); },
 
     // ── Check if fully logged in and context set ─────────
     isLoggedIn() {

@@ -67,8 +67,26 @@
 
   // ── 2. DATA FETCHING ────────────────────────────────────────────────────
   window.loadBalanceSheetData = async function () {
-    const societyId = (window.Auth && Auth.getSocietyId) ? Auth.getSocietyId() : (sessionStorage.getItem('activeSocietyId') || '1');
-    const fyId = (window.Auth && Auth.getFYId) ? Auth.getFYId() : (sessionStorage.getItem('activeFYId') || '1');
+    let societyId = (window.Auth && Auth.getSocietyId) ? Auth.getSocietyId() : sessionStorage.getItem('activeSocietyId');
+    if (!societyId || isNaN(parseInt(societyId, 10))) societyId = '1';
+
+    let fyId = (window.Auth && Auth.getFYId) ? Auth.getFYId() : sessionStorage.getItem('activeFYId');
+    if (!fyId || isNaN(parseInt(fyId, 10)) || String(fyId) === 'false') {
+      try {
+        const fyRes = await API.get('/api/financial-years?societyId=' + societyId);
+        if (fyRes && fyRes.data && fyRes.data.length > 0) {
+          const activeFy = fyRes.data.find(f => f.isActive) || fyRes.data[0];
+          fyId = String(activeFy.fYId);
+          sessionStorage.setItem('activeFYId', fyId);
+          if (activeFy.fYLabel) sessionStorage.setItem('activeFYLabel', activeFy.fYLabel);
+        } else {
+          fyId = '1';
+        }
+      } catch (_) {
+        fyId = '1';
+      }
+    }
+
     const asOnInp = document.getElementById('bs-as-on-date');
     const asOnDate = asOnInp ? asOnInp.value : '';
     const comparePrev = 'true';
@@ -503,6 +521,9 @@
           return bt.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
         }
 
+        const memberGroupTotal = memberItems.reduce((sum, m) => sum + (parseFloat(m.dueAmount != null ? m.dueAmount : m.advanceAmount) || 0), 0);
+        const memberGroupPrevTotal = memberItems.reduce((sum, m) => sum + (parseFloat(m.prevAmount) || 0), 0);
+
         if (showMemberBreakup) {
           // Member Dues Breakup TICK IS ON:
           let processedCount = 0;
@@ -529,7 +550,7 @@
                 memName: m.memName,
                 prevAmount: itemPrevAmt,
                 dueAmount: itemAmt,
-                outerAmount: isLastOfAll ? g.totalCurrent : null,
+                outerAmount: isLastOfAll ? (memberItems.length > 0 ? memberGroupTotal : g.totalCurrent) : null,
                 isLast: isLastOfAll,
                 isGroupEnd: isLastOfAll
               });
@@ -550,7 +571,7 @@
               accName: formatBillTypeName(bt),
               prevAmount: btPrevTotal || 0,
               currentAmount: btTotal,
-              outerAmount: isLast ? g.totalCurrent : null,
+              outerAmount: isLast ? (memberItems.length > 0 ? memberGroupTotal : g.totalCurrent) : null,
               isLast: isLast,
               isGroupEnd: isLast
             });

@@ -11,8 +11,12 @@ const API = (() => {
     const token = (typeof Auth !== 'undefined' && Auth.getToken)
       ? Auth.getToken()
       : (sessionStorage.getItem('jwtToken') || localStorage.getItem('jwtToken'));
-    const societyId = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
-    const fyId = sessionStorage.getItem('activeFYId') || localStorage.getItem('activeFYId');
+    const societyId = (typeof Auth !== 'undefined' && Auth.getSocietyId)
+      ? Auth.getSocietyId()
+      : (sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId'));
+    const fyId = (typeof Auth !== 'undefined' && Auth.getFYId)
+      ? Auth.getFYId()
+      : (sessionStorage.getItem('activeFYId') || localStorage.getItem('activeFYId'));
 
     const headers = {
       'Content-Type': 'application/json',
@@ -20,8 +24,8 @@ const API = (() => {
     };
 
     if (token) headers['Authorization'] = 'Bearer ' + token;
-    if (societyId) headers['X-Society-Id'] = societyId;
-    if (fyId) headers['X-FY-Id'] = fyId;
+    if (societyId && String(societyId) !== 'false') headers['X-Society-Id'] = societyId;
+    if (fyId && String(fyId) !== 'false') headers['X-FY-Id'] = fyId;
 
     return headers;
   }
@@ -36,8 +40,53 @@ const API = (() => {
     return base + endpoint;
   }
 
+  function _isViewOnlyBlocked(method, endpoint) {
+    if (method === 'GET') return false;
+
+    const isViewOnly = (typeof Auth !== 'undefined' && typeof Auth.isViewOnly === 'function')
+      ? Auth.isViewOnly()
+      : (() => {
+          const prim = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+          const curr = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+          return !!(prim && curr && String(prim) !== String(curr));
+        })();
+
+    if (!isViewOnly) return false;
+
+    const ep = (endpoint || '').toLowerCase();
+    if (ep.includes('/auth') || ep.includes('/login')) return false;
+
+    const isSocietyMasterPage = typeof window !== 'undefined' && window.location.pathname.toLowerCase().includes('society-master');
+    if (isSocietyMasterPage && ep.includes('/societies')) return false;
+
+    return true;
+  }
+
+  function _triggerViewOnlyAlert() {
+    const socName = (typeof Auth !== 'undefined' && Auth.getSocietyName)
+      ? Auth.getSocietyName()
+      : (sessionStorage.getItem('activeSocietyName') || 'this society');
+
+    if (typeof WorkspaceBridge !== 'undefined' && WorkspaceBridge.showViewOnlyModal) {
+      WorkspaceBridge.showViewOnlyModal(socName);
+    } else if (window.parent && window.parent !== window && window.parent.WorkspaceManager && window.parent.WorkspaceManager.showViewOnlyModal) {
+      window.parent.WorkspaceManager.showViewOnlyModal(socName);
+    } else if (typeof window.WorkspaceManager !== 'undefined' && window.WorkspaceManager.showViewOnlyModal) {
+      window.WorkspaceManager.showViewOnlyModal(socName);
+    } else {
+      alert(`[VIEW-ONLY MODE]\n\nYou are viewing "${socName}" in View-Only mode.\nTo make changes or create entries, please switch to this society from Society Master.`);
+    }
+  }
+
   // ── Core fetch wrapper ─────────────────────────────────
   async function _request(method, endpoint, body = null, raw = false) {
+    if (_isViewOnlyBlocked(method, endpoint)) {
+      _triggerViewOnlyAlert();
+      const err = new Error('Action blocked: Viewing in read-only mode. Switch to this society from Society Master to make changes.');
+      err.isViewOnlyBlocked = true;
+      throw err;
+    }
+
     const opts = {
       method,
       headers: _headers()
@@ -117,10 +166,56 @@ const API = (() => {
         .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
         .join('&');
       return _request('GET', qs ? `${endpoint}?${qs}` : endpoint);
+    },
+
+    isViewOnly() {
+      return _isViewOnlyBlocked('POST', '/api/test');
     }
   };
 
 })();
+
+// ── Intercept raw window.fetch so even modules using fetch() directly are protected ──
+if (typeof window !== 'undefined' && window.fetch && !window._jeevikaFetchPatched) {
+  window._jeevikaFetchPatched = true;
+  const _originalFetch = window.fetch;
+  window.fetch = async function (resource, options) {
+    const method = (options && options.method ? options.method : 'GET').toUpperCase();
+    const url = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
+
+    if (method !== 'GET' && method !== 'HEAD') {
+      const prim = sessionStorage.getItem('primaryActiveSocietyId') || localStorage.getItem('primaryActiveSocietyId');
+      const curr = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId');
+      const isViewOnly = !!(prim && curr && String(prim) !== String(curr));
+
+      if (isViewOnly) {
+        const ep = url.toLowerCase();
+        const isAuth = ep.includes('/auth') || ep.includes('/login');
+        const isSocMaster = window.location.pathname.toLowerCase().includes('society-master');
+        const isSocietyMgmt = isSocMaster && ep.includes('/societies');
+
+        if (!isAuth && !isSocietyMgmt) {
+          const socName = sessionStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyName') || 'this society';
+          if (typeof WorkspaceBridge !== 'undefined' && WorkspaceBridge.showViewOnlyModal) {
+            WorkspaceBridge.showViewOnlyModal(socName);
+          } else if (window.parent && window.parent !== window && window.parent.WorkspaceManager && window.parent.WorkspaceManager.showViewOnlyModal) {
+            window.parent.WorkspaceManager.showViewOnlyModal(socName);
+          } else if (window.WorkspaceManager && window.WorkspaceManager.showViewOnlyModal) {
+            window.WorkspaceManager.showViewOnlyModal(socName);
+          } else {
+            alert(`[READ-ONLY VIEW MODE]\n\nYou are viewing "${socName}" in View-Only mode.\nTo make changes or create entries, please switch to this society from Society Master.`);
+          }
+
+          const err = new Error('Action blocked: Viewing in read-only mode. Switch to this society from Society Master to make changes.');
+          err.isViewOnlyBlocked = true;
+          return Promise.reject(err);
+        }
+      }
+    }
+
+    return _originalFetch.apply(this, arguments);
+  };
+}
 
 if (typeof window !== 'undefined') {
   window.API = API;

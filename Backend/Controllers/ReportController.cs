@@ -276,7 +276,79 @@ namespace JeevikaERP.Controllers
                     }
                 }
 
-                // 4. Query All Accounts with Opening and Transactional balances up to effectiveAsOn
+                // 4a. Pre-fetch Member Billing Item Credits (SocMemberBillItem) per Account
+                var memberBillPriorCredits = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                var memberBillTxnCredits = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+                using (var cmdMB = conn.CreateCommand())
+                {
+                    cmdMB.CommandText = @"
+                        SELECT bi.AccountCode, COALESCE(bi.AccountName, '') AS AccountName,
+                               SUM(CASE WHEN @hasBounds = TRUE AND b.BillDate < @fyStart THEN bi.Amount ELSE 0 END) AS PriorAmount,
+                               SUM(CASE WHEN (@hasBounds = FALSE OR b.BillDate >= @fyStart) AND b.BillDate <= @asOn THEN bi.Amount ELSE 0 END) AS TxnAmount
+                        FROM jeevika_erp.SocMemberBillItem bi
+                        JOIN jeevika_erp.SocMemberBill b ON bi.BillId = b.BillId
+                        WHERE b.SocietyId = @sid 
+                          AND (b.FYId = @fyid OR (@hasBounds = TRUE AND b.BillDate >= @fyStart AND b.BillDate <= @fyEnd))
+                          AND b.IsDeleted = FALSE
+                        GROUP BY bi.AccountCode, bi.AccountName";
+                    cmdMB.Parameters.AddWithValue("@sid", societyId);
+                    cmdMB.Parameters.AddWithValue("@fyid", fyId);
+                    cmdMB.Parameters.AddWithValue("@hasBounds", (fyStart.HasValue && fyEnd.HasValue));
+                    cmdMB.Parameters.AddWithValue("@fyStart", fyStart.HasValue ? fyStart.Value.Date : (object)DBNull.Value);
+                    cmdMB.Parameters.AddWithValue("@fyEnd", fyEnd.HasValue ? fyEnd.Value.Date : (object)DBNull.Value);
+                    cmdMB.Parameters.AddWithValue("@asOn", effectiveAsOn);
+
+                    using var rMB = cmdMB.ExecuteReader();
+                    while (rMB.Read())
+                    {
+                        string c = rMB["AccountCode"]?.ToString()?.Trim() ?? "";
+                        string n = rMB["AccountName"]?.ToString()?.Trim() ?? "";
+                        decimal pAmt = Convert.ToDecimal(rMB["PriorAmount"]);
+                        decimal tAmt = Convert.ToDecimal(rMB["TxnAmount"]);
+
+                        if (!string.IsNullOrEmpty(c))
+                        {
+                            if (pAmt != 0) memberBillPriorCredits[c] = memberBillPriorCredits.GetValueOrDefault(c) + pAmt;
+                            if (tAmt != 0) memberBillTxnCredits[c] = memberBillTxnCredits.GetValueOrDefault(c) + tAmt;
+                        }
+                        if (!string.IsNullOrEmpty(n))
+                        {
+                            if (pAmt != 0) memberBillPriorCredits[n] = memberBillPriorCredits.GetValueOrDefault(n) + pAmt;
+                            if (tAmt != 0) memberBillTxnCredits[n] = memberBillTxnCredits.GetValueOrDefault(n) + tAmt;
+                        }
+                    }
+                }
+
+                // 4b. Pre-fetch Member Billing Debits for Dues From Members (ASS-1025)
+                decimal memberBillPriorDebits = 0m;
+                decimal memberBillTxnDebits = 0m;
+                using (var cmdMBD = conn.CreateCommand())
+                {
+                    cmdMBD.CommandText = @"
+                        SELECT 
+                            COALESCE(SUM(CASE WHEN @hasBounds = TRUE AND b.BillDate < @fyStart THEN b.TotalAmount ELSE 0 END), 0) AS PriorAmount,
+                            COALESCE(SUM(CASE WHEN (@hasBounds = FALSE OR b.BillDate >= @fyStart) AND b.BillDate <= @asOn THEN b.TotalAmount ELSE 0 END), 0) AS TxnAmount
+                        FROM jeevika_erp.SocMemberBill b
+                        WHERE b.SocietyId = @sid 
+                          AND (b.FYId = @fyid OR (@hasBounds = TRUE AND b.BillDate >= @fyStart AND b.BillDate <= @fyEnd))
+                          AND b.IsDeleted = FALSE";
+                    cmdMBD.Parameters.AddWithValue("@sid", societyId);
+                    cmdMBD.Parameters.AddWithValue("@fyid", fyId);
+                    cmdMBD.Parameters.AddWithValue("@hasBounds", (fyStart.HasValue && fyEnd.HasValue));
+                    cmdMBD.Parameters.AddWithValue("@fyStart", fyStart.HasValue ? fyStart.Value.Date : (object)DBNull.Value);
+                    cmdMBD.Parameters.AddWithValue("@fyEnd", fyEnd.HasValue ? fyEnd.Value.Date : (object)DBNull.Value);
+                    cmdMBD.Parameters.AddWithValue("@asOn", effectiveAsOn);
+
+                    using var rMBD = cmdMBD.ExecuteReader();
+                    if (rMBD.Read())
+                    {
+                        memberBillPriorDebits = Convert.ToDecimal(rMBD["PriorAmount"]);
+                        memberBillTxnDebits = Convert.ToDecimal(rMBD["TxnAmount"]);
+                    }
+                }
+
+                // 4c. Query All Accounts with Opening and Transactional balances up to effectiveAsOn
                 using var cmd = conn.CreateCommand();
                 var sql = @"
                     SELECT a.AccountId, a.AccCode, a.AccName, a.GroupId, 
@@ -345,6 +417,25 @@ namespace JeevikaERP.Controllers
                         decimal txnDebit = Convert.ToDecimal(r["TxnDebit"]);
                         decimal txnCredit = Convert.ToDecimal(r["TxnCredit"]);
 
+                        // Apply Member Billing Debits to Member Dues (ASS-1025)
+                        if (string.Equals(accCode.Trim(), "ASS-1025", StringComparison.OrdinalIgnoreCase))
+                        {
+                            priorDebit += memberBillPriorDebits;
+                            txnDebit += memberBillTxnDebits;
+                        }
+
+                        // Apply Member Billing Item Credits to specific billing account
+                        decimal billPriorCredit = 0;
+                        if (memberBillPriorCredits.TryGetValue(accCode, out var bpc)) billPriorCredit = bpc;
+                        else if (memberBillPriorCredits.TryGetValue(accName, out var bpn)) billPriorCredit = bpn;
+
+                        decimal billTxnCredit = 0;
+                        if (memberBillTxnCredits.TryGetValue(accCode, out var btc)) billTxnCredit = btc;
+                        else if (memberBillTxnCredits.TryGetValue(accName, out var btn)) billTxnCredit = btn;
+
+                        priorCredit += billPriorCredit;
+                        txnCredit += billTxnCredit;
+
                         decimal baseOpDr = masterOpDrCr.Equals("Dr", StringComparison.OrdinalIgnoreCase) ? masterOpBal : 0;
                         decimal baseOpCr = masterOpDrCr.Equals("Cr", StringComparison.OrdinalIgnoreCase) ? masterOpBal : 0;
 
@@ -404,27 +495,29 @@ namespace JeevikaERP.Controllers
                     }
                 }
 
-                // Add member billing item income up to effectiveAsOn
-                decimal memberBillIncome = 0;
+                // Add any unmapped member billing item income up to effectiveAsOn (items not tied to an existing account)
+                decimal unmappedBillIncome = 0;
                 using (var cmdMBS = conn.CreateCommand())
                 {
                     cmdMBS.CommandText = @"
                         SELECT COALESCE(SUM(bi.Amount), 0) AS TotalAmount
                         FROM jeevika_erp.SocMemberBillItem bi
                         JOIN jeevika_erp.SocMemberBill b ON bi.BillId = b.BillId
+                        LEFT JOIN jeevika_erp.SocAccount a ON (TRIM(bi.AccountCode) = TRIM(a.AccCode) OR LOWER(TRIM(bi.AccountName)) = LOWER(TRIM(a.AccName))) AND a.SocietyId = @sid AND a.IsDeleted = FALSE
                         WHERE b.SocietyId = @sid 
                           AND (b.FYId = @fyid OR (@hasBounds = TRUE AND b.BillDate >= @fyStart AND b.BillDate <= @fyEnd))
                           AND b.BillDate <= @asOn
-                          AND b.IsDeleted = FALSE";
+                          AND b.IsDeleted = FALSE
+                          AND a.AccountId IS NULL";
                     cmdMBS.Parameters.AddWithValue("@sid", societyId);
                     cmdMBS.Parameters.AddWithValue("@fyid", fyId);
                     cmdMBS.Parameters.AddWithValue("@hasBounds", (fyStart.HasValue && fyEnd.HasValue));
                     cmdMBS.Parameters.AddWithValue("@fyStart", fyStart.HasValue ? fyStart.Value.Date : (object)DBNull.Value);
                     cmdMBS.Parameters.AddWithValue("@fyEnd", fyEnd.HasValue ? fyEnd.Value.Date : (object)DBNull.Value);
                     cmdMBS.Parameters.AddWithValue("@asOn", effectiveAsOn);
-                    memberBillIncome = Convert.ToDecimal(cmdMBS.ExecuteScalar() ?? 0);
+                    unmappedBillIncome = Convert.ToDecimal(cmdMBS.ExecuteScalar() ?? 0);
                 }
-                totalIncome += memberBillIncome;
+                totalIncome += unmappedBillIncome;
 
                 decimal currentSurplus = totalIncome - totalExpense; // >0 Surplus, <0 Deficit
 
@@ -541,41 +634,13 @@ namespace JeevikaERP.Controllers
                     });
                 }
 
-                // Build Final Liabilities List with Group Totals
-                var liabilitiesList = new List<object>();
-                decimal grandTotalLiabCurrent = 0m;
-                decimal grandTotalLiabPrev = 0m;
-
-                foreach (var kvp in liabGroupsDict)
-                {
-                    var grp = kvp.Value;
-                    decimal grpCur = 0m;
-                    decimal grpPrev = 0m;
-                    foreach (var item in grp.Accounts)
-                    {
-                        grpCur += (decimal)item.currentAmount;
-                        grpPrev += (decimal)item.prevAmount;
-                    }
-                    grandTotalLiabCurrent += grpCur;
-                    grandTotalLiabPrev += grpPrev;
-
-                    liabilitiesList.Add(new
-                    {
-                        groupId = grp.GroupId,
-                        groupCode = grp.GroupCode,
-                        groupName = grp.GroupName,
-                        grpSubtotal = (bool)grp.GrpSubtotal,
-                        totalCurrent = grpCur,
-                        totalPrev = grpPrev,
-                        accounts = grp.Accounts
-                    });
-                }
-
                 // 6. Member-wise Dues & Advances Breakup by Bill Type (Maintenance first, then rest) - Synchronized with Member Ledger
                 var memberDuesList = new List<object>();
                 var memberAdvancesList = new List<object>();
                 decimal totalMemberDues = 0m;
                 decimal totalMemberAdvances = 0m;
+                decimal totalMemberPrevDues = 0m;
+                decimal totalMemberPrevAdvances = 0m;
 
                 try
                 {
@@ -600,6 +665,7 @@ namespace JeevikaERP.Controllers
                             var dueAmt = bal > 0 ? bal : 0m;
                             var prevAmt = prevBal > 0 ? prevBal : 0m;
                             totalMemberDues += dueAmt;
+                            totalMemberPrevDues += prevAmt;
                             memberDuesList.Add(new
                             {
                                 billType = (l.BillTypeName ?? "MAINTENANCE").ToUpper().Trim(),
@@ -619,6 +685,7 @@ namespace JeevikaERP.Controllers
                             var adv = bal < 0 ? Math.Abs(bal) : 0m;
                             var prevAdv = prevBal < 0 ? Math.Abs(prevBal) : 0m;
                             totalMemberAdvances += adv;
+                            totalMemberPrevAdvances += prevAdv;
                             memberAdvancesList.Add(new
                             {
                                 billType = (l.BillTypeName ?? "MAINTENANCE").ToUpper().Trim(),
@@ -640,6 +707,46 @@ namespace JeevikaERP.Controllers
                     System.Diagnostics.Debug.WriteLine("Error calculating member headwise ledger data for Balance Sheet: " + ex.Message);
                 }
 
+                // Build Final Liabilities List with Group Totals
+                var liabilitiesList = new List<object>();
+                decimal grandTotalLiabCurrent = 0m;
+                decimal grandTotalLiabPrev = 0m;
+
+                foreach (var kvp in liabGroupsDict)
+                {
+                    var grp = kvp.Value;
+                    decimal grpCur = 0m;
+                    decimal grpPrev = 0m;
+
+                    bool isMemberAdvGrp = kvp.Key.IndexOf("advance", StringComparison.OrdinalIgnoreCase) >= 0 && kvp.Key.IndexOf("member", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (isMemberAdvGrp && memberAdvancesList.Count > 0)
+                    {
+                        grpCur = totalMemberAdvances;
+                        grpPrev = totalMemberPrevAdvances;
+                    }
+                    else
+                    {
+                        foreach (var item in grp.Accounts)
+                        {
+                            grpCur += (decimal)item.currentAmount;
+                            grpPrev += (decimal)item.prevAmount;
+                        }
+                    }
+                    grandTotalLiabCurrent += grpCur;
+                    grandTotalLiabPrev += grpPrev;
+
+                    liabilitiesList.Add(new
+                    {
+                        groupId = grp.GroupId,
+                        groupCode = grp.GroupCode,
+                        groupName = grp.GroupName,
+                        grpSubtotal = (bool)grp.GrpSubtotal,
+                        totalCurrent = grpCur,
+                        totalPrev = grpPrev,
+                        accounts = grp.Accounts
+                    });
+                }
+
                 // Build Final Assets List with Group Totals
                 var assetsList = new List<object>();
                 decimal grandTotalAssetCurrent = 0m;
@@ -650,10 +757,20 @@ namespace JeevikaERP.Controllers
                     var grp = kvp.Value;
                     decimal grpCur = 0m;
                     decimal grpPrev = 0m;
-                    foreach (var item in grp.Accounts)
+
+                    bool isMemberDueGrp = kvp.Key.IndexOf("dues", StringComparison.OrdinalIgnoreCase) >= 0 && kvp.Key.IndexOf("member", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (isMemberDueGrp && memberDuesList.Count > 0)
                     {
-                        grpCur += (decimal)item.currentAmount;
-                        grpPrev += (decimal)item.prevAmount;
+                        grpCur = totalMemberDues;
+                        grpPrev = totalMemberPrevDues;
+                    }
+                    else
+                    {
+                        foreach (var item in grp.Accounts)
+                        {
+                            grpCur += (decimal)item.currentAmount;
+                            grpPrev += (decimal)item.prevAmount;
+                        }
                     }
                     grandTotalAssetCurrent += grpCur;
                     grandTotalAssetPrev += grpPrev;
@@ -948,8 +1065,16 @@ namespace JeevikaERP.Controllers
 
                         if (grpMain == 4) // Expenditure (Dr normal)
                         {
-                            currentAmt = txnDebit - txnCredit;
-                            decimal voucherPrev = prevDebit - prevCredit;
+                            decimal billCredit = 0;
+                            if (memberBillCredits.TryGetValue(accCode, out var bc)) billCredit = bc;
+                            else if (memberBillCredits.TryGetValue(accName, out var bn)) billCredit = bn;
+
+                            decimal billPrevCredit = 0;
+                            if (memberBillPrevCredits.TryGetValue(accCode, out var bpc)) billPrevCredit = bpc;
+                            else if (memberBillPrevCredits.TryGetValue(accName, out var bpn)) billPrevCredit = bpn;
+
+                            currentAmt = txnDebit - (txnCredit + billCredit);
+                            decimal voucherPrev = prevDebit - (prevCredit + billPrevCredit);
                             if (voucherPrev != 0)
                             {
                                 prevAmt = voucherPrev;
@@ -1473,7 +1598,6 @@ namespace JeevikaERP.Controllers
 
                     // 5. Fetch Member Bill transactions for Dues From Members and Income Heads
                     if (acc.code.Equals("ASS-1025", StringComparison.OrdinalIgnoreCase) || 
-                        acc.code.Equals("LIA-1020", StringComparison.OrdinalIgnoreCase) || 
                         acc.name.Equals("Dues From Members", StringComparison.OrdinalIgnoreCase))
                     {
                         if (isSummaryBilling)
