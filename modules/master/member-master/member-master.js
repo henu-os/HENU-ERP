@@ -698,7 +698,8 @@ function mmAdd() {
   setVal('mm-park2-podium', '');
   setVal('mm-park2-podium-reg', '');
   setVal('mm-park2-podium-charge', '0');
-  setVal('mm-park-bill-combined', '4-Wheeler');
+  setVal('mm-park-bill-combined', 'Both');
+  if (typeof mmResetCustomParkingRows === 'function') mmResetCustomParkingRows();
 
   mmParkingRcDocs = {};
   mmBulkRcFileList = [];
@@ -851,40 +852,134 @@ function mmAlterById(id, code, name) {
   setVal('mm-noc-code', 'INC-1005');
   setVal('mm-park4-code', 'INC-1006');
   setVal('mm-park2-code', 'INC-1007');
-  setVal('mm-park4-stilt', m.parkingSlot4W || m.ParkingSlot4W || '');
-  setVal('mm-park4-stilt-reg', m.vehicleNo4W || m.VehicleNo4W || '');
 
-  let p4Amt = parseFloat(m.parkingCharge4W !== undefined ? m.parkingCharge4W : (m.ParkingCharge4W !== undefined ? m.ParkingCharge4W : 0)) || 0;
-  if (p4Amt === 0 && typeof mmGetParkingAmountFromMatrix === 'function') {
-    const memId = m.socMemId || m.memberId || m.MemberId || mmEditId || mmSelectedId || 0;
-    const flat = m.flatNo || m.FlatNo || '';
-    const code = m.memCode || m.MemCode || '';
-    p4Amt = mmGetParkingAmountFromMatrix(memId, flat, code, '4w');
+  if (typeof mmResetCustomParkingRows === 'function') mmResetCustomParkingRows();
+
+  let parkDetails = null;
+  const rawParkDetails = m.parkingDetails || m.ParkingDetails;
+  if (rawParkDetails) {
+    try {
+      parkDetails = typeof rawParkDetails === 'string' ? JSON.parse(rawParkDetails) : rawParkDetails;
+    } catch (e) {
+      console.warn('Could not parse parkingDetails JSON', e);
+    }
   }
-  setVal('mm-park4-stilt-charge', p4Amt.toString());
-  setVal('mm-park4-podium', m.parkingSlot4WPodium || '');
-  setVal('mm-park4-podium-reg', m.vehicleNo4WPodium || '');
-  setVal('mm-park4-podium-charge', '0');
 
-  setVal('mm-park2-stilt', m.parkingSlot2W || m.ParkingSlot2W || '');
-  setVal('mm-park2-stilt-reg', m.vehicleNo2W || m.VehicleNo2W || '');
+  if (parkDetails) {
+    // 4W Stilt
+    setVal('mm-park4-stilt', parkDetails.stilt4W?.slot || m.parkingSlot4W || m.ParkingSlot4W || '');
+    setVal('mm-park4-stilt-reg', parkDetails.stilt4W?.reg || m.vehicleNo4W || m.VehicleNo4W || '');
+    const p4StiltChg = parkDetails.stilt4W?.charge !== undefined ? parkDetails.stilt4W.charge : (m.parkingCharge4W || m.ParkingCharge4W || 0);
+    setVal('mm-park4-stilt-charge', (p4StiltChg || 0).toString());
 
-  let p2Amt = parseFloat(m.parkingCharge2W !== undefined ? m.parkingCharge2W : (m.ParkingCharge2W !== undefined ? m.ParkingCharge2W : 0)) || 0;
-  if (p2Amt === 0 && typeof mmGetParkingAmountFromMatrix === 'function') {
-    const memId = m.socMemId || m.memberId || m.MemberId || mmEditId || mmSelectedId || 0;
-    const flat = m.flatNo || m.FlatNo || '';
-    const code = m.memCode || m.MemCode || '';
-    p2Amt = mmGetParkingAmountFromMatrix(memId, flat, code, '2w');
+    // 4W Podium
+    setVal('mm-park4-podium', parkDetails.podium4W?.slot || m.parkingSlot4WPodium || m.ParkingSlot4WPodium || '');
+    setVal('mm-park4-podium-reg', parkDetails.podium4W?.reg || m.vehicleNo4WPodium || m.VehicleNo4WPodium || '');
+    const p4PodiumChg = parkDetails.podium4W?.charge !== undefined ? parkDetails.podium4W.charge : (m.parkingCharge4WPodium || m.ParkingCharge4WPodium || 0);
+    setVal('mm-park4-podium-charge', (p4PodiumChg || 0).toString());
+
+    // 4W Custom Rows
+    if (Array.isArray(parkDetails.customRows4W)) {
+      parkDetails.customRows4W.forEach(cr => {
+        mmRenderRestoredCustomParkingRow('4-Wheeler', cr);
+      });
+    }
+
+    // 2W Stilt
+    setVal('mm-park2-stilt', parkDetails.stilt2W?.slot || m.parkingSlot2W || m.ParkingSlot2W || '');
+    setVal('mm-park2-stilt-reg', parkDetails.stilt2W?.reg || m.vehicleNo2W || m.VehicleNo2W || '');
+    const p2StiltChg = parkDetails.stilt2W?.charge !== undefined ? parkDetails.stilt2W.charge : (m.parkingCharge2W || m.ParkingCharge2W || 0);
+    setVal('mm-park2-stilt-charge', (p2StiltChg || 0).toString());
+
+    // 2W Podium
+    setVal('mm-park2-podium', parkDetails.podium2W?.slot || m.parkingSlot2WPodium || m.ParkingSlot2WPodium || '');
+    setVal('mm-park2-podium-reg', parkDetails.podium2W?.reg || m.vehicleNo2WPodium || m.VehicleNo2WPodium || '');
+    const p2PodiumChg = parkDetails.podium2W?.charge !== undefined ? parkDetails.podium2W.charge : (m.parkingCharge2WPodium || m.ParkingCharge2WPodium || 0);
+    setVal('mm-park2-podium-charge', (p2PodiumChg || 0).toString());
+
+    // 2W Custom Rows
+    if (Array.isArray(parkDetails.customRows2W)) {
+      parkDetails.customRows2W.forEach(cr => {
+        mmRenderRestoredCustomParkingRow('2-Wheeler', cr);
+      });
+    }
+
+    setVal('mm-park-bill-combined', parkDetails.billCombined || m.parkingBillCombined || m.ParkingBillCombined || 'Both');
+    mmParkingRcDocs = parkDetails.rcDocs || m.parkingRcDocs || {};
+    mmBulkRcFileList = parkDetails.bulkRcFiles || m.parkingBulkRcFiles || [];
+  } else {
+    // Backward compatibility for existing records
+    setVal('mm-park4-stilt', m.parkingSlot4W || m.ParkingSlot4W || '');
+    setVal('mm-park4-stilt-reg', m.vehicleNo4W || m.VehicleNo4W || '');
+    setVal('mm-park4-podium', m.parkingSlot4WPodium || m.ParkingSlot4WPodium || '');
+    setVal('mm-park4-podium-reg', m.vehicleNo4WPodium || m.VehicleNo4WPodium || '');
+
+    const p4StiltVal = parseFloat(m.parkingCharge4W !== undefined ? m.parkingCharge4W : (m.ParkingCharge4W !== undefined ? m.ParkingCharge4W : 0)) || 0;
+    const p4PodiumVal = parseFloat(m.parkingCharge4WPodium !== undefined ? m.parkingCharge4WPodium : (m.ParkingCharge4WPodium !== undefined ? m.ParkingCharge4WPodium : 0)) || 0;
+
+    if (p4StiltVal > 0 || p4PodiumVal > 0) {
+      setVal('mm-park4-stilt-charge', p4StiltVal.toString());
+      setVal('mm-park4-podium-charge', p4PodiumVal.toString());
+    } else {
+      let p4Amt = 0;
+      if (typeof mmGetParkingAmountFromMatrix === 'function') {
+        const memId = m.socMemId || m.memberId || m.MemberId || mmEditId || mmSelectedId || 0;
+        const flat = m.flatNo || m.FlatNo || '';
+        const code = m.memCode || m.MemCode || '';
+        p4Amt = mmGetParkingAmountFromMatrix(memId, flat, code, '4w');
+      }
+      if (p4Amt > 0) {
+        if (!m.parkingSlot4W && !m.vehicleNo4W && (m.parkingSlot4WPodium || m.vehicleNo4WPodium)) {
+          setVal('mm-park4-stilt-charge', '0');
+          setVal('mm-park4-podium-charge', p4Amt.toString());
+        } else {
+          setVal('mm-park4-stilt-charge', p4Amt.toString());
+          setVal('mm-park4-podium-charge', '0');
+        }
+      } else {
+        setVal('mm-park4-stilt-charge', '0');
+        setVal('mm-park4-podium-charge', '0');
+      }
+    }
+
+    setVal('mm-park2-stilt', m.parkingSlot2W || m.ParkingSlot2W || '');
+    setVal('mm-park2-stilt-reg', m.vehicleNo2W || m.VehicleNo2W || '');
+    setVal('mm-park2-podium', m.parkingSlot2WPodium || m.ParkingSlot2WPodium || '');
+    setVal('mm-park2-podium-reg', m.vehicleNo2WPodium || m.VehicleNo2WPodium || '');
+
+    const p2StiltVal = parseFloat(m.parkingCharge2W !== undefined ? m.parkingCharge2W : (m.ParkingCharge2W !== undefined ? m.ParkingCharge2W : 0)) || 0;
+    const p2PodiumVal = parseFloat(m.parkingCharge2WPodium !== undefined ? m.parkingCharge2WPodium : (m.ParkingCharge2WPodium !== undefined ? m.ParkingCharge2WPodium : 0)) || 0;
+
+    if (p2StiltVal > 0 || p2PodiumVal > 0) {
+      setVal('mm-park2-stilt-charge', p2StiltVal.toString());
+      setVal('mm-park2-podium-charge', p2PodiumVal.toString());
+    } else {
+      let p2Amt = 0;
+      if (typeof mmGetParkingAmountFromMatrix === 'function') {
+        const memId = m.socMemId || m.memberId || m.MemberId || mmEditId || mmSelectedId || 0;
+        const flat = m.flatNo || m.FlatNo || '';
+        const code = m.memCode || m.MemCode || '';
+        p2Amt = mmGetParkingAmountFromMatrix(memId, flat, code, '2w');
+      }
+      if (p2Amt > 0) {
+        if (!m.parkingSlot2W && !m.vehicleNo2W && (m.parkingSlot2WPodium || m.vehicleNo2WPodium)) {
+          setVal('mm-park2-stilt-charge', '0');
+          setVal('mm-park2-podium-charge', p2Amt.toString());
+        } else {
+          setVal('mm-park2-stilt-charge', p2Amt.toString());
+          setVal('mm-park2-podium-charge', '0');
+        }
+      } else {
+        setVal('mm-park2-stilt-charge', '0');
+        setVal('mm-park2-podium-charge', '0');
+      }
+    }
+
+    setVal('mm-park-bill-combined', m.parkingBillCombined || m.ParkingBillCombined || 'Both');
+    mmParkingRcDocs = m.parkingRcDocs || {};
+    mmBulkRcFileList = m.parkingBulkRcFiles || [];
   }
-  setVal('mm-park2-stilt-charge', p2Amt.toString());
-  setVal('mm-park2-podium', m.parkingSlot2WPodium || '');
-  setVal('mm-park2-podium-reg', m.vehicleNo2WPodium || '');
-  setVal('mm-park2-podium-charge', '0');
 
-  setVal('mm-park-bill-combined', m.parkingBillCombined || '4-Wheeler');
-
-  mmParkingRcDocs = m.parkingRcDocs || {};
-  mmBulkRcFileList = m.parkingBulkRcFiles || [];
   mmRenderRowRcActions('4w-stilt');
   mmRenderRowRcActions('4w-podium');
   mmRenderRowRcActions('2w-stilt');
@@ -1047,13 +1142,16 @@ async function mmSave() {
     ParkingCharge4W: parseFloat(val('mm-park4-stilt-charge')) || 0,
     ParkingSlot4WPodium: val('mm-park4-podium').trim(),
     VehicleNo4WPodium: val('mm-park4-podium-reg').trim(),
+    ParkingCharge4WPodium: parseFloat(val('mm-park4-podium-charge')) || 0,
     ParkingSlot2W: val('mm-park2-stilt').trim(),
     VehicleNo2W: val('mm-park2-stilt-reg').trim(),
     ParkingCharge2W: parseFloat(val('mm-park2-stilt-charge')) || 0,
     ParkingSlot2WPodium: val('mm-park2-podium').trim(),
     VehicleNo2WPodium: val('mm-park2-podium-reg').trim(),
-    ParkingBillCombined: val('mm-park-bill-combined'),
+    ParkingCharge2WPodium: parseFloat(val('mm-park2-podium-charge')) || 0,
+    ParkingBillCombined: val('mm-park-bill-combined') || 'Both',
     ParkingTotal: parseFloat(val('mm-park-grand-total')) || 0,
+    ParkingDetails: (typeof mmCollectParkingDetailsJson === 'function') ? mmCollectParkingDetailsJson() : '',
     ParkingRcDocs: mmParkingRcDocs,
     ParkingBulkRcFiles: mmBulkRcFileList,
     LienBankName: val('mm-lien-bank-name').trim(),
@@ -3847,6 +3945,9 @@ window.mmAddAdditionalRow = mmAddAdditionalRow;
 window.mmHandleDocFile = mmHandleDocFile;
 window.mmCalcTotalBal = mmCalcTotalBal;
 window.mmCalcParkingTotals = mmCalcParkingTotals;
+window.mmResetCustomParkingRows = mmResetCustomParkingRows;
+window.mmCollectParkingDetailsJson = mmCollectParkingDetailsJson;
+window.mmRenderRestoredCustomParkingRow = mmRenderRestoredCustomParkingRow;
 window.mmCalcShareCertValues = mmCalcShareCertValues;
 window.mmAddActiveNomineeRow = mmAddActiveNomineeRow;
 window.mmExecuteMemberTransfer = mmExecuteMemberTransfer;
@@ -5575,28 +5676,106 @@ async function mmCalcParkingTotals() {
     check2W = await mmCheckParkingConfiguredInBillTypes('2w');
   }
 
-  const combSelect = document.getElementById('mm-park-bill-combined');
-  const combVal = combSelect ? combSelect.value : 'Both';
-
-  let grandTotal = 0;
-  if (check4W.configured && check2W.configured) {
-    if (combVal === '4-Wheeler') {
-      grandTotal = total4W;
-    } else if (combVal === '2-Wheeler') {
-      grandTotal = total2W;
-    } else {
-      grandTotal = total4W + total2W;
-    }
-  } else if (check4W.configured && !check2W.configured) {
-    grandTotal = total4W;
-  } else if (!check4W.configured && check2W.configured) {
-    grandTotal = total2W;
-  } else {
-    grandTotal = 0;
-  }
-
+  // Grand Total Parking is always the combined sum of 4-Wheeler and 2-Wheeler parking
+  const grandTotal = total4W + total2W;
   const grandEl = document.getElementById('mm-park-grand-total');
   if (grandEl) grandEl.value = grandTotal.toString();
+}
+
+// ── Parking Slots Persistence Helpers ──────────────────────
+function mmResetCustomParkingRows() {
+  document.querySelectorAll('#mm-park4-rows-container .mm-park-row').forEach(row => {
+    const key = row.getAttribute('data-slot-key');
+    if (key && key !== '4w-stilt' && key !== '4w-podium') row.remove();
+  });
+  document.querySelectorAll('#mm-park2-rows-container .mm-park-row').forEach(row => {
+    const key = row.getAttribute('data-slot-key');
+    if (key && key !== '2w-stilt' && key !== '2w-podium') row.remove();
+  });
+}
+
+function mmCollectParkingDetailsJson() {
+  try {
+    const customRows4W = [];
+    const customRows2W = [];
+
+    document.querySelectorAll('#mm-park4-rows-container .mm-park-row').forEach(row => {
+      const key = row.getAttribute('data-slot-key');
+      if (key && key !== '4w-stilt' && key !== '4w-podium') {
+        const inputs = row.querySelectorAll('input');
+        const labels = row.querySelectorAll('label');
+        customRows4W.push({
+          key: key,
+          label: labels[0]?.textContent || 'CUSTOM SLOT',
+          slotNo: inputs[0]?.value?.trim() || '',
+          regNo: inputs[1]?.value?.trim() || '',
+          charge: parseFloat(inputs[2]?.value) || 0
+        });
+      }
+    });
+
+    document.querySelectorAll('#mm-park2-rows-container .mm-park-row').forEach(row => {
+      const key = row.getAttribute('data-slot-key');
+      if (key && key !== '2w-stilt' && key !== '2w-podium') {
+        const inputs = row.querySelectorAll('input');
+        const labels = row.querySelectorAll('label');
+        customRows2W.push({
+          key: key,
+          label: labels[0]?.textContent || 'CUSTOM SLOT',
+          slotNo: inputs[0]?.value?.trim() || '',
+          regNo: inputs[1]?.value?.trim() || '',
+          charge: parseFloat(inputs[2]?.value) || 0
+        });
+      }
+    });
+
+    return JSON.stringify({
+      stilt4W: { slot: val('mm-park4-stilt').trim(), reg: val('mm-park4-stilt-reg').trim(), charge: parseFloat(val('mm-park4-stilt-charge')) || 0 },
+      podium4W: { slot: val('mm-park4-podium').trim(), reg: val('mm-park4-podium-reg').trim(), charge: parseFloat(val('mm-park4-podium-charge')) || 0 },
+      customRows4W: customRows4W,
+      stilt2W: { slot: val('mm-park2-stilt').trim(), reg: val('mm-park2-stilt-reg').trim(), charge: parseFloat(val('mm-park2-stilt-charge')) || 0 },
+      podium2W: { slot: val('mm-park2-podium').trim(), reg: val('mm-park2-podium-reg').trim(), charge: parseFloat(val('mm-park2-podium-charge')) || 0 },
+      customRows2W: customRows2W,
+      billCombined: val('mm-park-bill-combined') || 'Both',
+      rcDocs: mmParkingRcDocs || {},
+      bulkRcFiles: mmBulkRcFileList || []
+    });
+  } catch (e) {
+    console.warn('Error collecting parking details json', e);
+    return '';
+  }
+}
+
+function mmRenderRestoredCustomParkingRow(wheelerType, cr) {
+  const is4W = (wheelerType === '4-Wheeler' || wheelerType === '4w');
+  const container = document.getElementById(is4W ? 'mm-park4-rows-container' : 'mm-park2-rows-container');
+  if (!container) return;
+
+  const slotKey = cr.key || (is4W ? `4w_custom_${Date.now()}_${Math.floor(Math.random()*1000)}` : `2w_custom_${Date.now()}_${Math.floor(Math.random()*1000)}`);
+  let labelText = (cr.label || (is4W ? 'CUSTOM 4W' : 'CUSTOM 2W')).toUpperCase();
+  labelText = labelText.replace(/SLOT NO\.|REG NO\./gi, '').trim() || 'CUSTOM';
+
+  const div = document.createElement('div');
+  div.className = 'mm-park-row';
+  div.setAttribute('data-wheeler-type', is4W ? '4-Wheeler' : '2-Wheeler');
+  div.setAttribute('data-slot-key', slotKey);
+  div.innerHTML = `
+    <label>${labelText} SLOT NO.</label>
+    <input type="text" class="mm-input" placeholder="e.g. ${labelText}-1" value="${cr.slotNo || ''}">
+    <label>${labelText} REG NO.</label>
+    <input type="text" class="mm-input" placeholder="${is4W ? 'MH-12-AB-1234' : 'MH-12-XY-9999'}" value="${cr.regNo || ''}">
+    <label>CHARGES (₹)</label>
+    <input type="number" class="mm-input mm-park-charge-input" value="${cr.charge || 0}" oninput="mmOnParkingChargeInput(this, '${is4W ? '4w' : '2w'}')">
+    <label>RC UPLOAD</label>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div class="mm-rc-actions-wrap" id="mm-rc-wrap-${slotKey}">
+        <button type="button" class="mm-btn mm-btn-icon" onclick="mmTriggerRowRcUpload('${slotKey}')" title="Upload RC"><i class="bi bi-upload"></i></button>
+      </div>
+      <button type="button" class="mm-btn mm-btn-icon mm-btn-danger-outline" onclick="mmRemoveCustomParkingRow(this)" title="Delete this slot row" style="border-color:#ef4444;color:#ef4444;"><i class="bi bi-trash"></i></button>
+    </div>
+  `;
+  container.appendChild(div);
+  if (typeof mmRenderRowRcActions === 'function') mmRenderRowRcActions(slotKey);
 }
 
 // ── Single Row RC Upload & Actions ────────────────────────
@@ -5848,6 +6027,7 @@ function mmRemoveCustomParkingRow(btn) {
     }
     row.remove();
     mmCalcParkingTotals();
+    if (typeof mmSyncParkingToMatrixAndBreakup === 'function') mmSyncParkingToMatrixAndBreakup();
   }
 }
 

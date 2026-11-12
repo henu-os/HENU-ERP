@@ -33,17 +33,30 @@ class BackendManager {
     console.log('[BackendManager] Spawning managed ASP.NET Core backend...');
 
     try {
-      const useCompiledDll = fs.existsSync(config.backendDll);
-      const command = 'dotnet';
-      const args = useCompiledDll
-        ? [config.backendDll]
-        : ['run', '--project', 'JeevikaERP.csproj'];
+      let command;
+      let args;
+
+      if (config.backendExe && fs.existsSync(config.backendExe)) {
+        command = config.backendExe;
+        args = [];
+        console.log(`[BackendManager] Using standalone backend executable: ${command}`);
+      } else if (config.backendDll && fs.existsSync(config.backendDll)) {
+        command = 'dotnet';
+        args = [config.backendDll];
+        console.log(`[BackendManager] Using dotnet runtime DLL: ${config.backendDll}`);
+      } else {
+        command = 'dotnet';
+        args = ['run', '--project', 'JeevikaERP.csproj'];
+        console.log(`[BackendManager] Falling back to dotnet run in ${config.backendDir}`);
+      }
 
       this.managedProcess = spawn(command, args, {
         cwd: config.backendDir,
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
         env: {
           ...process.env,
+          JEEVIKA_WEB_ROOT: config.rootDir,
           ASPNETCORE_ENVIRONMENT: config.isDevelopment ? 'Development' : 'Production'
         }
       });

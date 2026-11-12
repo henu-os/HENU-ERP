@@ -40,6 +40,7 @@ const WorkspaceManager = (() => {
     { id: 'committee-master', label: 'Committee Master', category: 'master', path: 'modules/master/committee-master/committee-master.html' },
     { id: 'staff-master', label: 'Staff Master', category: 'master', path: 'modules/master/staff-master/staff-master.html' },
     { id: 'vendor-master', label: 'Vendor Master', category: 'master', path: 'modules/master/vendor-master/vendor-master.html' },
+    { id: 'fixed-asset', label: 'Fixed Asset & Depreciation', category: 'master', path: 'modules/master/fixed-asset/fixed-asset.html' },
     { id: 'config-notes-master', label: 'Configuration & Notes Master', category: 'master', path: 'modules/master/config-notes-master/config-notes-master.html' },
 
     // TRANSACTIONS
@@ -73,14 +74,13 @@ const WorkspaceManager = (() => {
       ]
     },
     { id: 'bank-reco', label: 'Bank Reconciliation', category: 'transaction', path: 'modules/transaction/bank-reco/bank-reco.html' },
-    { id: 'voucher-check', label: 'Voucher Check', category: 'transaction', path: 'modules/transaction/voucher-check/voucher-check.html' },
 
     // MEMBER REPORTS
     { id: 'mr-bill-format', label: 'Bill Format', category: 'member-report', path: 'modules/member-reports/bill-format/bill-format.html' },
     { id: 'mr-receipt', label: 'Receipt', category: 'member-report', path: 'modules/member-reports/receipt/receipt.html' },
     { id: 'mr-debit-note', label: 'Debit Note', category: 'member-report', path: 'modules/member-reports/debit-note/debit-note.html' },
     { id: 'mr-credit-note', label: 'Credit Note', category: 'member-report', path: 'modules/member-reports/credit-note/credit-note.html' },
-    { id: 'mr-adjustment', label: 'Adjustment', category: 'member-report', path: 'modules/member-reports/adjustment/adjustment.html' },
+    { id: 'mr-adjustment', label: 'Member Reversal Receipts', category: 'member-report', path: 'modules/member-reports/adjustment/adjustment.html' },
     { id: 'mr-outstanding-list', label: 'Outstanding List', category: 'member-report', path: 'modules/member-reports/outstanding-list/outstanding-list.html' },
     {
       id: 'member-ledger-group',
@@ -95,15 +95,15 @@ const WorkspaceManager = (() => {
     { id: 'mr-member-control-account', label: 'Member Control Account', category: 'member-report', path: 'modules/member-reports/member-control-account/member-control-account.html' },
     { id: 'mr-balance-confirmation-letter', label: 'Balance Confirmation Letter', category: 'member-report', path: 'modules/member-reports/balance-confirmation-letter/balance-confirmation-letter.html' },
     { id: 'mr-bank-deposit-list', label: 'Bank Deposit List', category: 'member-report', path: 'modules/member-reports/bank-deposit-list/bank-deposit-list.html' },
-    { id: 'mr-data-sheet', label: 'Data Sheet', category: 'member-report', path: 'modules/member-reports/data-sheet/data-sheet.html' },
     {
       id: 'bill-register-group',
-      label: 'Bill Register',
+      label: 'Bill & Receipts Register',
       category: 'member-report',
       isGroup: true,
       children: [
         { id: 'mr-bill-register', label: 'Bill Register', path: 'modules/member-reports/bill-register/bill-register.html' },
-        { id: 'mr-receipt-register', label: 'Receipt Register', path: 'modules/member-reports/receipt-register/receipt-register.html' }
+        { id: 'mr-receipt-register', label: 'Receipt Register', path: 'modules/member-reports/receipt-register/receipt-register.html' },
+        { id: 'mr-data-sheet', label: 'Data sheet', path: 'modules/member-reports/data-sheet/data-sheet.html' }
       ]
     },
     {
@@ -116,8 +116,7 @@ const WorkspaceManager = (() => {
         { id: 'mr-credit-note-register', label: 'Credit Note Register', path: 'modules/member-reports/credit-note-register/credit-note-register.html' }
       ]
     },
-    { id: 'mr-adjustment-register', label: 'Adjustment Register', category: 'member-report', path: 'modules/member-reports/adjustment-register/adjustment-register.html' },
-    { id: 'mr-member-jv-register', label: 'Member JV Register', category: 'member-report', path: 'modules/member-reports/member-jv-register/member-jv-register.html' },
+    { id: 'mr-bill-type-trf-register', label: 'Bill Type TRF Register', category: 'member-report', path: 'modules/member-reports/bill-type-trf-register/bill-type-trf-register.html' },
 
     // ACCOUNT REPORTS
     { id: 'ar-cash-bank-book', label: 'Cash/Bank Book', category: 'account-report', path: 'modules/account-reports/cash-bank-book/cash-bank-book.html' },
@@ -134,6 +133,7 @@ const WorkspaceManager = (() => {
     { id: 'ar-monthly-report', label: 'Monthly Report', category: 'account-report', path: 'modules/account-reports/monthly-report/monthly-report.html' },
 
     // ADDITIONAL REPORTS
+    { id: 'voucher-check', label: 'Voucher Check', category: 'additional-report', path: 'modules/transaction/voucher-check/voucher-check.html' },
     { id: 'adr-tds-report', label: 'TDS Report', category: 'additional-report', path: 'modules/additional-reports/tds-report/tds-report.html' },
     { id: 'adr-gst-report', label: 'GST Report', category: 'additional-report', path: 'modules/additional-reports/gst-report/gst-report.html' },
     { id: 'adr-fund-reports', label: 'Fund Reports', category: 'additional-report', path: 'modules/additional-reports/fund-reports/fund-reports.html' },
@@ -440,9 +440,10 @@ const WorkspaceManager = (() => {
   function updateTopSocietyUI(name, isViewOnly) {
     const topSoc = document.getElementById('topSocietyName');
     if (topSoc && name) {
+      topSoc.title = name;
       topSoc.innerHTML = isViewOnly
-        ? `${escHtmlWs(name)} <span class="erp-soc-mode-tag view-only" style="margin-left:6px; font-size:10px; background:#F59E0B; color:#000; padding:1px 6px; border-radius:3px; font-weight:bold;">VIEW ONLY</span>`
-        : `${escHtmlWs(name)} <span class="erp-soc-mode-tag active" style="margin-left:6px; font-size:10px; background:#10B981; color:#fff; padding:1px 6px; border-radius:3px; font-weight:bold;">ACTIVE</span>`;
+        ? `<span class="erp-soc-name-text">${escHtmlWs(name)}</span> <span class="erp-soc-mode-tag view-only" style="margin-left:6px; font-size:10px; background:#F59E0B; color:#000; padding:1px 6px; border-radius:3px; font-weight:bold; flex-shrink:0;">VIEW ONLY</span>`
+        : `<span class="erp-soc-name-text">${escHtmlWs(name)}</span> <span class="erp-soc-mode-tag active" style="margin-left:6px; font-size:10px; background:#10B981; color:#fff; padding:1px 6px; border-radius:3px; font-weight:bold; flex-shrink:0;">ACTIVE</span>`;
     }
 
     const sbSoc = document.getElementById('sbSocName');

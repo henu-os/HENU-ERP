@@ -6,51 +6,68 @@
 // ═══════════════════════════════════════════════════════════
 
 const { app } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const windowManager = require('./window-manager');
 const backendManager = require('./backend-manager');
 const readinessCheck = require('./readiness-check');
+
+const logDir = path.join(process.env.APPDATA || os.tmpdir(), 'HENU ERP');
+try { if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true }); } catch (e) {}
+const logPath = path.join(logDir, 'startup.log');
+function logStep(msg) {
+  try {
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] [Lifecycle] ${msg}\n`);
+  } catch (e) {}
+}
 
 /**
  * Initializes and runs the complete application lifecycle
  * @param {import('../shared/configuration')} config
  */
 function initializeApp(config) {
+  logStep('Registering app.whenReady listener');
   app.whenReady().then(async () => {
-    console.log('[Lifecycle] Electron ready. Creating main window...');
+    logStep('app.whenReady triggered! Creating main window...');
     const mainWindow = windowManager.createMainWindow(config);
+    logStep('MainWindow created.');
 
-    console.log(`[Lifecycle] Checking initial backend health on ${config.backendUrl}...`);
+    logStep(`Checking initial backend health on ${config.backendUrl}...`);
     let isHealthy = await readinessCheck.checkBackendHealth(config);
+    logStep(`Initial backend health: ${isHealthy}`);
 
     if (!isHealthy) {
-      console.log('[Lifecycle] Backend is offline. Starting managed local backend process...');
+      logStep('Backend is offline. Starting managed local backend process...');
       const started = backendManager.startManagedBackend(config);
+      logStep(`startManagedBackend returned: ${started}`);
 
       if (started) {
-        console.log('[Lifecycle] Polling backend readiness probe...');
+        logStep('Polling backend readiness probe...');
         const readiness = await readinessCheck.waitForBackendReady(config, (attempt, max) => {
-          console.log(`[Lifecycle] Probing backend readiness (attempt ${attempt}/${max})...`);
+          logStep(`Probing backend readiness (attempt ${attempt}/${max})...`);
         });
 
         isHealthy = readiness.ready;
+        logStep(`Readiness probe result: isHealthy=${isHealthy}`);
         if (!isHealthy) {
-          console.error(`[Lifecycle] Readiness check failed: ${readiness.error}`);
+          logStep(`Readiness check failed: ${readiness.error}`);
           windowManager.loadErrorScreen(mainWindow, readiness.error || 'Readiness timeout', config.appEntryUrl);
           return;
         }
       } else {
-        console.error('[Lifecycle] Failed to start backend process.');
+        logStep('Failed to start backend process.');
         windowManager.loadErrorScreen(mainWindow, 'Could not launch ASP.NET Core process', config.appEntryUrl);
         return;
       }
     } else {
-      console.log('[Lifecycle] Connected to existing active backend process.');
+      logStep('Connected to existing active backend process.');
     }
 
     if (isHealthy) {
-      console.log(`[Lifecycle] Backend ready. Loading application entry: ${config.appEntryUrl}`);
+      logStep(`Backend ready. Loading application entry: ${config.appEntryUrl}`);
       windowManager.loadApplicationUrl(mainWindow, config.appEntryUrl).catch((err) => {
-        console.error('[Lifecycle] Failed to load application URL:', err);
+        logStep(`Failed to load application URL: ${err.message}`);
         windowManager.loadErrorScreen(mainWindow, err.message, config.appEntryUrl);
       });
     }

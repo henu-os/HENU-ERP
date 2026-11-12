@@ -302,6 +302,9 @@
   }
 
   function getBsSignatoryPosition() {
+    if (window.ReportFooterHelper) {
+      return window.ReportFooterHelper.isSwapped('balance-sheet') ? 'right' : 'left';
+    }
     const cfg = getBsConfig();
     if (cfg) {
       if (cfg.bsSignatoryRight !== undefined) {
@@ -314,8 +317,22 @@
     return 'left';
   }
 
+  window.toggleBsFooterSwap = function () {
+    if (window.ReportFooterHelper) {
+      const swapped = window.ReportFooterHelper.toggle('balance-sheet');
+      const chk = document.getElementById('chk-swap-footer');
+      if (chk) chk.checked = swapped;
+    }
+    renderBalanceSheetView();
+  };
+
   // ── 4. T-FORMAT SIDE-BY-SIDE RENDERER ────────────────────────────────────
   window.renderBalanceSheetView = function () {
+    const chkSwap = document.getElementById('chk-swap-footer');
+    if (chkSwap && window.ReportFooterHelper) {
+      chkSwap.checked = window.ReportFooterHelper.isSwapped('balance-sheet');
+    }
+
     if (!currentBSReport) return;
 
     const isHenuOs = isHenuOsTemplate();

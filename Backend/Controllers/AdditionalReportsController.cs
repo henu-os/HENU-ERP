@@ -1124,13 +1124,8 @@ namespace JeevikaERP.Controllers
                         }
                         else
                         {
-                            propTax = Math.Round(principal * 0.15m, 2);
-                            elecWater = Math.Round(principal * 0.10m, 2);
-                            sinking = Math.Round(principal * 0.15m, 2);
-                            repair = Math.Round(principal * 0.30m, 2);
-                            liftAmc = Math.Round(principal * 0.10m, 2);
-                            security = Math.Round(principal * 0.15m, 2);
-                            insurance = Math.Round(principal * 0.05m, 2);
+                            // When no granular item breakup exists, treat principal as general society service charge
+                            other = principal;
                         }
 
                         decimal gstExempt = propTax + elecWater + mhadaTax;
@@ -1709,6 +1704,15 @@ namespace JeevikaERP.Controllers
                         totalDebits = grandDebits,
                         totalCredits = grandCredits,
                         totalClosingBalance = grandClosing
+                    },
+                    statutoryCompliance = new
+                    {
+                        totalInvestedFds = GetTotalActiveInvestments(conn, prefix, societyId),
+                        statutoryShortfall = Math.Max(0, grandClosing - GetTotalActiveInvestments(conn, prefix, societyId)),
+                        isCompliant = (grandClosing <= GetTotalActiveInvestments(conn, prefix, societyId)),
+                        statusNote = (grandClosing <= GetTotalActiveInvestments(conn, prefix, societyId))
+                            ? "Fully Compliant: 100% Statutory Funds Invested in Earmarked Fixed Deposits (Model Bye-Laws 13 & 14)"
+                            : $"Statutory Shortfall: ₹{Math.Max(0, grandClosing - GetTotalActiveInvestments(conn, prefix, societyId)):N2} must be invested in earmarked FDs within 30 days under Model Bye-Laws 13 & 14"
                     }
                 });
             }
@@ -1780,6 +1784,9 @@ namespace JeevikaERP.Controllers
                     totalInvestments = Convert.ToDecimal(cmd.ExecuteScalar() ?? 0);
                 }
 
+                decimal statutoryShortfall = Math.Max(0, totalClosing - totalInvestments);
+                bool isCompliant = (totalClosing <= totalInvestments);
+
                 return Ok(new
                 {
                     success = true,
@@ -1791,7 +1798,12 @@ namespace JeevikaERP.Controllers
                         totalContributions = totalContributions,
                         totalUtilization = totalUtilization,
                         totalInvestments = totalInvestments,
-                        totalClosingBalance = totalClosing
+                        totalClosingBalance = totalClosing,
+                        statutoryShortfall = statutoryShortfall,
+                        isCompliant = isCompliant,
+                        statutoryStatus = isCompliant 
+                            ? "Fully Compliant: 100% Statutory Reserves Invested in Fixed Deposits"
+                            : $"Statutory Shortfall: ₹{statutoryShortfall:N2} required to be invested in FDs under Bye-Laws 13 & 14"
                     },
                     funds = fundList
                 });
@@ -1799,6 +1811,21 @@ namespace JeevikaERP.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { success = false, message = "Funds summary failed: " + ex.Message });
+            }
+        }
+
+        private static decimal GetTotalActiveInvestments(NpgsqlConnection conn, string prefix, int societyId)
+        {
+            try
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"SELECT COALESCE(SUM(Principal), 0) FROM {prefix}SocFundInvestment WHERE SocietyId = @sid AND Status = 'Active'";
+                AddParam(cmd, "@sid", societyId);
+                return Convert.ToDecimal(cmd.ExecuteScalar() ?? 0);
+            }
+            catch
+            {
+                return 0;
             }
         }
 

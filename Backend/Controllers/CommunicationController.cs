@@ -321,6 +321,88 @@ namespace JeevikaERP.Controllers
                     }
                     catch { }
                 }
+
+                // Seed default statutory housing society templates if none exist
+                try
+                {
+                    using var countCmd = conn.CreateCommand();
+                    countCmd.CommandText = $"SELECT COUNT(*) FROM {prefix}communication_templates";
+                    long c = Convert.ToInt64(countCmd.ExecuteScalar() ?? 0);
+                    if (c == 0)
+                    {
+                        SeedStatutoryTemplates(conn, prefix);
+                    }
+                }
+                catch { }
+            }
+            catch { }
+        }
+
+        private static void SeedStatutoryTemplates(DbConnection conn, string prefix)
+        {
+            try
+            {
+                var templates = new (string Name, string CommType, string Category, string Subject, string Body)[]
+                {
+                    (
+                        "SOCIETY_MAINTENANCE_BILL",
+                        "BILLING",
+                        "UTILITY",
+                        "Maintenance Bill Notification — {{month_year}}",
+                        "Dear {{member_name}},\n\nYour maintenance bill for {{bill_period}} has been generated for Flat {{flat_no}}.\n\nBill No: {{bill_no}}\nDue Date: {{due_date}}\nPrincipal Amount: ₹{{principal_amount}}\nTotal Amount Payable: ₹{{total_amount}}\n\n*Statutory Note:* Under Model Bye-Law No. 68, overdue payments beyond due date will attract simple interest @ 21% p.a. Kindly clear via UPI/NEFT/Cheque.\n\nRegards,\nManaging Committee, {{society_name}}"
+                    ),
+                    (
+                        "SOCIETY_PAYMENT_RECEIPT",
+                        "RECEIPT",
+                        "UTILITY",
+                        "Payment Receipt Acknowledgment — {{receipt_no}}",
+                        "Dear {{member_name}},\n\nWe acknowledge receipt of ₹{{amount}} towards Flat {{flat_no}}.\n\nReceipt No: {{receipt_no}}\nDate: {{receipt_date}}\nPayment Mode: {{payment_mode}}\nInstrument/Ref No: {{instrument_no}}\n\n*Note:* Non-cash instruments are accepted subject to realization in the society bank account.\n\nThank you,\n{{society_name}}"
+                    ),
+                    (
+                        "AGM_STATUTORY_NOTICE",
+                        "GENERAL",
+                        "UTILITY",
+                        "Notice of Annual General Body Meeting (AGM) — {{society_name}}",
+                        "Dear Member {{member_name}} (Flat {{flat_no}}),\n\nNotice is hereby given under Section 75 of MCS Act and Model Bye-Law No. 99 that the Annual General Body Meeting (AGM) will be held as follows:\n\nDate: {{meeting_date}}\nTime: {{meeting_time}}\nVenue: {{meeting_venue}}\n\nKindly note that this notice fulfills the statutory 14 clear days requirement. Agenda papers are available in the Society office.\n\nBy Order of Managing Committee,\nHon. Secretary, {{society_name}}"
+                    ),
+                    (
+                        "SGM_SPECIAL_NOTICE",
+                        "GENERAL",
+                        "UTILITY",
+                        "Notice of Special General Body Meeting (SGM) — {{society_name}}",
+                        "Dear Member {{member_name}} (Flat {{flat_no}}),\n\nNotice is hereby given under Model Bye-Law No. 101 that a Special General Body Meeting (SGM) will be held on {{meeting_date}} at {{meeting_time}} at {{meeting_venue}} to discuss urgent society business.\n\nStatutory notice requirement of 5 clear days has been complied with.\n\nHon. Secretary, {{society_name}}"
+                    ),
+                    (
+                        "DEFAULTER_RECOVERY_NOTICE",
+                        "REMINDER",
+                        "UTILITY",
+                        "Statutory Demand Notice for Outstanding Dues — Flat {{flat_no}}",
+                        "Dear Member {{member_name}} (Flat {{flat_no}}),\n\nFINAL STATUTORY DEMAND NOTICE under Model Bye-Law No. 68 & MCS Act Section 101.\n\nPrincipal Overdue: ₹{{principal_overdue}}\nSimple Interest @ 21% p.a.: ₹{{interest_overdue}}\nTotal Outstanding: ₹{{total_outstanding}}\n\nYou are requested to clear the outstanding balance within 15 days of this notice to prevent initiation of recovery proceedings.\n\nManaging Committee, {{society_name}}"
+                    ),
+                    (
+                        "COMMITTEE_MEETING_NOTICE",
+                        "COMMITTEE",
+                        "UTILITY",
+                        "Managing Committee Monthly Meeting Notice",
+                        "Dear Committee Member {{member_name}},\n\nThe monthly meeting of the Managing Committee under Model Bye-Law No. 115 is scheduled on {{meeting_date}} at {{meeting_time}} at the Society Office.\n\nAgenda:\n1. Monthly accounts & expenditure confirmation\n2. Member transfer/nomination approvals\n3. General maintenance matters\n\nHon. Secretary, {{society_name}}"
+                    )
+                };
+
+                foreach (var t in templates)
+                {
+                    using var insCmd = conn.CreateCommand();
+                    insCmd.CommandText = $@"
+                        INSERT INTO {prefix}communication_templates
+                            (society_id, channel, communication_type, template_name, meta_template_name, category, subject, body, language, status, is_active)
+                        VALUES
+                            (1, 'WHATSAPP', @ctype, @tname, @tname, @cat, @sub, @body, 'en_US', 'APPROVED', TRUE)";
+                    AddParam(insCmd, "@ctype", t.CommType);
+                    AddParam(insCmd, "@tname", t.Name);
+                    AddParam(insCmd, "@cat", t.Category);
+                    AddParam(insCmd, "@sub", t.Subject);
+                    AddParam(insCmd, "@body", t.Body);
+                    insCmd.ExecuteNonQuery();
+                }
             }
             catch { }
         }

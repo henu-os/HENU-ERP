@@ -52,7 +52,9 @@ function registerIpcHandlers(config) {
   // 3. Safe App Info Query
   ipcMain.handle(constants.IPC_CHANNELS.GET_APP_INFO, () => {
     return {
-      name: 'JEEVIKA ERP',
+      name: constants.APP_NAME,
+      company: constants.COMPANY_NAME,
+      supportUrl: constants.SUPPORT_URL,
       version: '2.0.0',
       environment: 'Desktop Host',
       platform: process.platform

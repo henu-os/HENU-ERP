@@ -334,9 +334,20 @@ namespace JeevikaERP
                             Amount NUMERIC(18,2) DEFAULT 0
                         );
 
-                        -- Ensure SocMember columns exist for secondary contact details
+                        -- Ensure SocMember columns exist for secondary contact details and extended parking
                         ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ContactNo2 VARCHAR(50);
                         ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS Email2 VARCHAR(100);
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingSlot4WPodium VARCHAR(100);
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS VehicleNo4WPodium VARCHAR(100);
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge4W NUMERIC(15, 2) DEFAULT 0;
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge4WPodium NUMERIC(15, 2) DEFAULT 0;
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingSlot2WPodium VARCHAR(100);
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS VehicleNo2WPodium VARCHAR(100);
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge2W NUMERIC(15, 2) DEFAULT 0;
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge2WPodium NUMERIC(15, 2) DEFAULT 0;
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingBillCombined VARCHAR(50) DEFAULT 'Both';
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingTotal NUMERIC(15, 2) DEFAULT 0;
+                        ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingDetails TEXT;
 
                         -- Ensure SocStaff columns exist for extended details
                         ALTER TABLE jeevika_erp.SocStaff ADD COLUMN IF NOT EXISTS Phone2 VARCHAR(50);
@@ -447,6 +458,58 @@ namespace JeevikaERP
                             new_value TEXT,
                             version INT DEFAULT 1,
                             created_at TIMESTAMPTZ DEFAULT NOW()
+                        );
+
+                        -- ═══════════════════════════════════════════════════════════
+                        -- FIXED ASSET ACCOUNT STRUCTURE & AUTOMATION TABLES
+                        -- ═══════════════════════════════════════════════════════════
+                        ALTER TABLE jeevika_erp.SocAccount ADD COLUMN IF NOT EXISTS ParentAccountId INT;
+                        ALTER TABLE jeevika_erp.SocAccount ADD COLUMN IF NOT EXISTS AssetId INT;
+                        ALTER TABLE jeevika_erp.SocAccount ADD COLUMN IF NOT EXISTS AccountSubType VARCHAR(50);
+
+                        CREATE TABLE IF NOT EXISTS jeevika_erp.SocAsset (
+                            AssetId SERIAL PRIMARY KEY,
+                            SocietyId INT NOT NULL,
+                            AssetCode VARCHAR(50) NOT NULL,
+                            AssetName VARCHAR(150) NOT NULL,
+                            AssetCategory VARCHAR(100) NOT NULL,
+                            PurchaseDate DATE,
+                            DepreciationMethod VARCHAR(20) NOT NULL DEFAULT 'SLM',
+                            DepreciationRate NUMERIC(6, 2) NOT NULL DEFAULT 0.00,
+                            HalfYearRate NUMERIC(6, 2) DEFAULT 0.00,
+                            UsefulLifeYears INT DEFAULT 0,
+                            OpeningCost NUMERIC(14, 2) DEFAULT 0.00,
+                            OpeningDepreciation NUMERIC(14, 2) DEFAULT 0.00,
+                            MainAccountId INT,
+                            AdditionsSubAccountId INT,
+                            DepreciationSubAccountId INT,
+                            AccumulatedDepAccountId INT,
+                            Status VARCHAR(20) DEFAULT 'ACTIVE',
+                            Remarks TEXT,
+                            IsDeleted BOOLEAN DEFAULT FALSE,
+                            CreatedAt TIMESTAMPTZ DEFAULT NOW(),
+                            UpdatedAt TIMESTAMPTZ DEFAULT NOW()
+                        );
+                        CREATE UNIQUE INDEX IF NOT EXISTS uidx_socasset_code ON jeevika_erp.SocAsset (SocietyId, AssetCode) WHERE IsDeleted = FALSE;
+
+                        CREATE TABLE IF NOT EXISTS jeevika_erp.SocAssetDepreciationLog (
+                            LogId SERIAL PRIMARY KEY,
+                            SocietyId INT NOT NULL,
+                            FYId INT NOT NULL,
+                            AssetId INT NOT NULL,
+                            PeriodFrom DATE,
+                            PeriodTo DATE,
+                            GrossCost NUMERIC(14, 2) DEFAULT 0.00,
+                            OpeningWDV NUMERIC(14, 2) DEFAULT 0.00,
+                            AdditionsDuringYear NUMERIC(14, 2) DEFAULT 0.00,
+                            DepreciationRate NUMERIC(6, 2) DEFAULT 0.00,
+                            DepreciationMethod VARCHAR(20) DEFAULT 'SLM',
+                            DepreciationAmount NUMERIC(14, 2) DEFAULT 0.00,
+                            NetBookValue NUMERIC(14, 2) DEFAULT 0.00,
+                            VoucherId INT,
+                            VoucherNo VARCHAR(50),
+                            CalculatedAt TIMESTAMPTZ DEFAULT NOW(),
+                            CalculatedBy VARCHAR(100) DEFAULT 'SYSTEM'
                         );
 
                         -- Seed Central Report Registry for ALL 18 Member Report Items (19 tree nodes)

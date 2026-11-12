@@ -1,0 +1,213 @@
+/**
+ * bill-type-trf-register.css — Member Bill Type TRF Register (Landscape A4)
+ * Identity: Deep Slate Navy (#0F172A) & Royal Blue (#2563EB)
+ */
+
+:root {
+  --trfr-primary: #0f172a;
+  --trfr-accent: #2563eb;
+  --trfr-border: #cbd5e1;
+  --trfr-border-dark: #334155;
+  --trfr-text: #0f172a;
+  --trfr-text-muted: #64748b;
+  --trfr-bg: #ffffff;
+}
+
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
+.trfr-module-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: #f1f5f9;
+  min-height: calc(100vh - 120px);
+  overflow-x: auto;
+}
+
+.trfr-report-page {
+  width: 297mm;
+  min-height: 210mm;
+  background: var(--trfr-bg);
+  color: var(--trfr-text);
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  font-size: 9.5px;
+  padding: 12mm 14mm 10mm 14mm;
+  box-sizing: border-box;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--trfr-border);
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.trfr-header {
+  border-bottom: 2px solid var(--trfr-primary);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.trfr-soc-name {
+  font-size: 13pt;
+  font-weight: 800;
+  color: var(--trfr-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.trfr-soc-sub {
+  font-size: 8pt;
+  color: var(--trfr-text-muted);
+  margin-top: 2px;
+}
+
+.trfr-title-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--trfr-primary);
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+
+.trfr-doc-title {
+  font-size: 10pt;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.trfr-period-tag {
+  font-size: 8pt;
+  font-weight: 600;
+}
+
+.trfr-table-wrapper {
+  flex: 1;
+  width: 100%;
+}
+
+.trfr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+  table-layout: fixed;
+}
+
+.trfr-table th {
+  background: #f8fafc;
+  color: var(--trfr-primary);
+  border: 1px solid var(--trfr-border-dark);
+  padding: 5px 4px;
+  font-weight: 700;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.trfr-table td {
+  border: 1px solid var(--trfr-border);
+  padding: 4px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.trfr-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.trfr-table .center { text-align: center; }
+.trfr-table .right { text-align: right; }
+
+.trfr-table .total-row td {
+  border-top: 2px solid var(--trfr-primary);
+  border-bottom: 2px solid var(--trfr-primary);
+  background: #f1f5f9;
+  font-weight: 800;
+  font-size: 9.5px;
+  padding: 6px 4px;
+}
+
+.trfr-status-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 7.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.trfr-status-tag.posted {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.trfr-status-tag.draft {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.trfr-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.trfr-summary-item {
+  background: #f8fafc;
+  border: 1px solid var(--trfr-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  text-align: center;
+}
+
+.trfr-summary-item .lbl {
+  font-size: 7.5pt;
+  color: var(--trfr-text-muted);
+  text-transform: uppercase;
+}
+
+.trfr-summary-item .val {
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--trfr-text);
+  margin-top: 2px;
+}
+
+.trfr-footer {
+  border-top: 1px solid var(--trfr-border);
+  padding-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 7.5pt;
+  color: var(--trfr-text-muted);
+  margin-top: auto;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .trfr-module-wrapper {
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  .trfr-report-page {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    padding: 8mm !important;
+    page-break-after: always;
+  }
+}

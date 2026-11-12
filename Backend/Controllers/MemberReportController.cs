@@ -656,6 +656,18 @@ namespace JeevikaERP.Controllers
                                     OR vh.RefNo = @midStr
                                     OR vh.PersonName ILIKE @mname
                                     OR (vh.PersonName ILIKE @mflat AND vh.PersonName ILIKE @mname)
+                                    OR (
+                                      vh.VoucherType = 'BillTypeTransfer' AND (
+                                        vh.RefNo ILIKE '%|' || @midStr || '|%'
+                                        OR vh.RefNo ILIKE '%|' || @mcode || '|%'
+                                        OR vh.RefNo ILIKE '%|' || @mcode || '%'
+                                        OR vh.Particular2 ILIKE '%M1:' || @midStr || ':%'
+                                        OR vh.Particular2 ILIKE '%M2:' || @midStr || ':%'
+                                        OR vh.Particular2 ILIKE '%|' || @mcode || ' %'
+                                        OR vh.Particular2 ILIKE '%|' || @mcode || '|%'
+                                        OR vh.Particular2 ILIKE '%->%' || @mcode || '%'
+                                      )
+                                    )
                                     OR EXISTS (
                                       SELECT 1 FROM jeevika_erp.SocMemberNote mn 
                                       WHERE mn.SocietyId = @sid AND mn.MemberId = @mid AND mn.NoteNo = vh.VoucherNo AND mn.IsDeleted = FALSE
@@ -777,51 +789,90 @@ namespace JeevikaERP.Controllers
                                         var refStr = rR["RefNo"]?.ToString() ?? "";
                                         var p1Str = rR["Particular1"]?.ToString() ?? "";
                                         var p2Str = rR["Particular2"]?.ToString() ?? "";
-                                        var allMeta = $"{refStr} {p1Str} {p2Str} {narr}";
+                                        var pName = rR["PersonName"]?.ToString() ?? "";
+                                        var pCode = rR["PersonCode"]?.ToString() ?? "";
 
-                                        string otherBt = "";
                                         var parts = refStr.Split('|');
-                                        if (parts.Length >= 4)
+                                        string leftBt = parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0].Trim() : "Maintenance";
+                                        string leftType = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1].Trim() : "Dr";
+                                        string rightBt = parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]) ? parts[2].Trim() : "Maintenance";
+                                        string rightType = parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) ? parts[3].Trim() : "Cr";
+
+                                        int m1Id = parts.Length > 6 && int.TryParse(parts[6], out int pM1) ? pM1 : 0;
+                                        int m2Id = parts.Length > 7 && int.TryParse(parts[7], out int pM2) ? pM2 : 0;
+                                        string m1Code = parts.Length > 8 ? parts[8].Trim() : "";
+                                        string m2Code = parts.Length > 9 ? parts[9].Trim() : "";
+                                        string m2Name = parts.Length > 11 ? parts[11].Trim() : "";
+
+                                        bool isMember1 = (m1Id > 0 && mem.MemberId == m1Id) ||
+                                                         (!string.IsNullOrEmpty(m1Code) && mem.Code.Equals(m1Code, StringComparison.OrdinalIgnoreCase)) ||
+                                                         (m1Id == 0 && (refStr.Contains($"|{mem.MemberId}|") || (!string.IsNullOrEmpty(pCode) && pCode.Equals(mem.Code, StringComparison.OrdinalIgnoreCase))));
+
+                                        bool isMember2 = (m2Id > 0 && mem.MemberId == m2Id) ||
+                                                         (!string.IsNullOrEmpty(m2Code) && mem.Code.Equals(m2Code, StringComparison.OrdinalIgnoreCase)) ||
+                                                         (!string.IsNullOrEmpty(m2Name) && mem.Name.IndexOf(m2Name, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                                         p2Str.IndexOf($"M2:{mem.MemberId}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                         p2Str.IndexOf($"M2:{mem.Code}", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                        if (!isMember1 && !isMember2)
                                         {
-                                            if (parts[0].Trim().Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                isDebit = parts[1].Trim().Equals("Dr", StringComparison.OrdinalIgnoreCase);
-                                                isCredit = parts[1].Trim().Equals("Cr", StringComparison.OrdinalIgnoreCase);
-                                                otherBt = parts[2].Trim();
-                                            }
-                                            else if (parts[2].Trim().Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                isDebit = parts[3].Trim().Equals("Dr", StringComparison.OrdinalIgnoreCase);
-                                                isCredit = parts[3].Trim().Equals("Cr", StringComparison.OrdinalIgnoreCase);
-                                                otherBt = parts[0].Trim();
-                                            }
+                                            if (pName.IndexOf(mem.Name, StringComparison.OrdinalIgnoreCase) >= 0 || pCode.Equals(mem.Code, StringComparison.OrdinalIgnoreCase))
+                                                isMember1 = true;
                                         }
 
-                                        if (!isDebit && !isCredit)
+                                        if (isMember1 && isMember2)
                                         {
-                                            if (allMeta.IndexOf("to " + bt.BillTypeName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                allMeta.IndexOf("into " + bt.BillTypeName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                allMeta.IndexOf("-> " + bt.BillTypeName, StringComparison.OrdinalIgnoreCase) >= 0)
+                                            if (leftBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
                                             {
-                                                isDebit = true;
+                                                isDebit = leftType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                                isCredit = leftType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                                narr = isDebit ? $"Transfer from {rightBt}" : $"Transfer to {rightBt}";
+                                            }
+                                            else if (rightBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                isDebit = rightType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                                isCredit = rightType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                                narr = isDebit ? $"Transfer from {leftBt}" : $"Transfer to {leftBt}";
                                             }
                                             else
                                             {
-                                                isCredit = true;
+                                                continue;
                                             }
+                                        }
+                                        else if (isMember1)
+                                        {
+                                            if (!leftBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase) && !(isBtMaintenance && leftBt.IndexOf("maint", StringComparison.OrdinalIgnoreCase) >= 0))
+                                                continue;
+
+                                            isDebit = leftType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                            isCredit = leftType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                            string destLbl = !string.IsNullOrEmpty(m2Name) ? m2Name : (!string.IsNullOrEmpty(m2Code) ? m2Code : rightBt);
+                                            narr = $"Transfer ({leftType}) to {destLbl} [{rightBt}]";
+                                        }
+                                        else if (isMember2)
+                                        {
+                                            if (!rightBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase) && !(isBtMaintenance && rightBt.IndexOf("maint", StringComparison.OrdinalIgnoreCase) >= 0))
+                                                continue;
+
+                                            isDebit = rightType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                            isCredit = rightType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                            string srcLbl = !string.IsNullOrEmpty(m1Code) ? m1Code : (!string.IsNullOrEmpty(pName) ? pName : leftBt);
+                                            narr = $"Transfer ({rightType}) from {srcLbl} [{leftBt}]";
+                                        }
+                                        else
+                                        {
+                                            continue;
                                         }
 
                                         if (isDebit)
                                         {
                                             dr = Math.Abs(vAmt);
                                             displayType = "Transfer (In)";
-                                            if (!string.IsNullOrEmpty(otherBt)) narr = $"Transfer from {otherBt}";
                                         }
                                         else
                                         {
                                             cr = Math.Abs(vAmt);
                                             displayType = "Transfer (Out)";
-                                            if (!string.IsNullOrEmpty(otherBt)) narr = $"Transfer to {otherBt}";
                                         }
                                     }
                                     else if (vType.Equals("Journal", StringComparison.OrdinalIgnoreCase))
@@ -1428,6 +1479,18 @@ namespace JeevikaERP.Controllers
                                     OR vh.RefNo = @midStr
                                     OR vh.PersonName ILIKE @mname
                                     OR (vh.PersonName ILIKE @mflat AND vh.PersonName ILIKE @mname)
+                                    OR (
+                                      vh.VoucherType = 'BillTypeTransfer' AND (
+                                        vh.RefNo ILIKE '%|' || @midStr || '|%'
+                                        OR vh.RefNo ILIKE '%|' || @mcode || '|%'
+                                        OR vh.RefNo ILIKE '%|' || @mcode || '%'
+                                        OR vh.Particular2 ILIKE '%M1:' || @midStr || ':%'
+                                        OR vh.Particular2 ILIKE '%M2:' || @midStr || ':%'
+                                        OR vh.Particular2 ILIKE '%|' || @mcode || ' %'
+                                        OR vh.Particular2 ILIKE '%|' || @mcode || '|%'
+                                        OR vh.Particular2 ILIKE '%->%' || @mcode || '%'
+                                      )
+                                    )
                                     OR EXISTS (
                                       SELECT 1 FROM jeevika_erp.SocMemberNote mn 
                                       WHERE mn.SocietyId = @sid AND mn.MemberId = @mid AND mn.NoteNo = vh.VoucherNo AND mn.IsDeleted = FALSE
@@ -1508,7 +1571,7 @@ namespace JeevikaERP.Controllers
                             cmdRcpt.Parameters.AddWithValue("@mflat", "%" + mem.FlatNo + "%");
                             cmdRcpt.Parameters.AddWithValue("@mcode", mem.Code);
 
-                            var rcptRows = new List<(int VoucherId, string VoucherNo, DateTime VoucherDate, string VoucherType, decimal Amount, string Narration, string RefNo, string Particular1, string Particular2)>();
+                            var rcptRows = new List<(int VoucherId, string VoucherNo, DateTime VoucherDate, string VoucherType, decimal Amount, string Narration, string RefNo, string Particular1, string Particular2, string PersonCode, string PersonName)>();
 
                             using (var rR = cmdRcpt.ExecuteReader())
                             {
@@ -1523,7 +1586,9 @@ namespace JeevikaERP.Controllers
                                         rR["Narration"]?.ToString() ?? "",
                                         rR["RefNo"]?.ToString() ?? "",
                                         rR["Particular1"]?.ToString() ?? "",
-                                        rR["Particular2"]?.ToString() ?? ""
+                                        rR["Particular2"]?.ToString() ?? "",
+                                        rR["PersonCode"]?.ToString() ?? "",
+                                        rR["PersonName"]?.ToString() ?? ""
                                     ));
                                 }
                             }
@@ -1676,40 +1741,81 @@ namespace JeevikaERP.Controllers
                                         bool isDebit = false;
                                         bool isCredit = false;
                                         var refStr = row.RefNo;
-                                        var p1Str = row.Particular1;
-                                        var p2Str = row.Particular2;
-                                        var allMeta = $"{refStr} {p1Str} {p2Str} {narr}";
+                                        var p1Str = row.Particular1 ?? "";
+                                        var p2Str = row.Particular2 ?? "";
+                                        var pName = row.PersonName ?? "";
+                                        var pCode = row.PersonCode ?? "";
 
-                                        string otherBt = "";
                                         var parts = refStr.Split('|');
-                                        if (parts.Length >= 4)
+                                        string leftBt = parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0].Trim() : "Maintenance";
+                                        string leftType = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1].Trim() : "Dr";
+                                        string rightBt = parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]) ? parts[2].Trim() : "Maintenance";
+                                        string rightType = parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) ? parts[3].Trim() : "Cr";
+
+                                        int m1Id = parts.Length > 6 && int.TryParse(parts[6], out int pM1) ? pM1 : 0;
+                                        int m2Id = parts.Length > 7 && int.TryParse(parts[7], out int pM2) ? pM2 : 0;
+                                        string m1Code = parts.Length > 8 ? parts[8].Trim() : "";
+                                        string m2Code = parts.Length > 9 ? parts[9].Trim() : "";
+                                        string m2Name = parts.Length > 11 ? parts[11].Trim() : "";
+
+                                        bool isMember1 = (m1Id > 0 && mem.MemberId == m1Id) ||
+                                                         (!string.IsNullOrEmpty(m1Code) && mem.Code.Equals(m1Code, StringComparison.OrdinalIgnoreCase)) ||
+                                                         (m1Id == 0 && (refStr.Contains($"|{mem.MemberId}|") || (!string.IsNullOrEmpty(pCode) && pCode.Equals(mem.Code, StringComparison.OrdinalIgnoreCase))));
+
+                                        bool isMember2 = (m2Id > 0 && mem.MemberId == m2Id) ||
+                                                         (!string.IsNullOrEmpty(m2Code) && mem.Code.Equals(m2Code, StringComparison.OrdinalIgnoreCase)) ||
+                                                         (!string.IsNullOrEmpty(m2Name) && mem.Name.IndexOf(m2Name, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                                         p2Str.IndexOf($"M2:{mem.MemberId}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                         p2Str.IndexOf($"M2:{mem.Code}", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                        if (!isMember1 && !isMember2)
                                         {
-                                            if (parts[0].Trim().Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                isDebit = parts[1].Trim().Equals("Dr", StringComparison.OrdinalIgnoreCase);
-                                                isCredit = parts[1].Trim().Equals("Cr", StringComparison.OrdinalIgnoreCase);
-                                                otherBt = parts[2].Trim();
-                                            }
-                                            else if (parts[2].Trim().Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                isDebit = parts[3].Trim().Equals("Dr", StringComparison.OrdinalIgnoreCase);
-                                                isCredit = parts[3].Trim().Equals("Cr", StringComparison.OrdinalIgnoreCase);
-                                                otherBt = parts[0].Trim();
-                                            }
+                                            if (pName.IndexOf(mem.Name, StringComparison.OrdinalIgnoreCase) >= 0 || pCode.Equals(mem.Code, StringComparison.OrdinalIgnoreCase))
+                                                isMember1 = true;
                                         }
 
-                                        if (!isDebit && !isCredit)
+                                        if (isMember1 && isMember2)
                                         {
-                                            if (allMeta.IndexOf("to " + bt.BillTypeName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                allMeta.IndexOf("into " + bt.BillTypeName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                                allMeta.IndexOf("-> " + bt.BillTypeName, StringComparison.OrdinalIgnoreCase) >= 0)
+                                            if (leftBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
                                             {
-                                                isDebit = true;
+                                                isDebit = leftType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                                isCredit = leftType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                                narr = isDebit ? $"Transfer from {rightBt}" : $"Transfer to {rightBt}";
+                                            }
+                                            else if (rightBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                isDebit = rightType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                                isCredit = rightType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                                narr = isDebit ? $"Transfer from {leftBt}" : $"Transfer to {leftBt}";
                                             }
                                             else
                                             {
-                                                isCredit = true;
+                                                continue;
                                             }
+                                        }
+                                        else if (isMember1)
+                                        {
+                                            if (!leftBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase) && !(isBtMaintenance && leftBt.IndexOf("maint", StringComparison.OrdinalIgnoreCase) >= 0))
+                                                continue;
+
+                                            isDebit = leftType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                            isCredit = leftType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                            string destLbl = !string.IsNullOrEmpty(m2Name) ? m2Name : (!string.IsNullOrEmpty(m2Code) ? m2Code : rightBt);
+                                            narr = $"Transfer ({leftType}) to {destLbl} [{rightBt}]";
+                                        }
+                                        else if (isMember2)
+                                        {
+                                            if (!rightBt.Equals(bt.BillTypeName, StringComparison.OrdinalIgnoreCase) && !(isBtMaintenance && rightBt.IndexOf("maint", StringComparison.OrdinalIgnoreCase) >= 0))
+                                                continue;
+
+                                            isDebit = rightType.Equals("Dr", StringComparison.OrdinalIgnoreCase);
+                                            isCredit = rightType.Equals("Cr", StringComparison.OrdinalIgnoreCase);
+                                            string srcLbl = !string.IsNullOrEmpty(m1Code) ? m1Code : (!string.IsNullOrEmpty(pName) ? pName : leftBt);
+                                            narr = $"Transfer ({rightType}) from {srcLbl} [{leftBt}]";
+                                        }
+                                        else
+                                        {
+                                            continue;
                                         }
 
                                         if (isDebit)
@@ -1717,14 +1823,12 @@ namespace JeevikaERP.Controllers
                                             dr = Math.Abs(vAmt);
                                             princ = dr;
                                             displayType = "Transfer (In)";
-                                            if (!string.IsNullOrEmpty(otherBt)) narr = $"Transfer from {otherBt}";
                                         }
                                         else
                                         {
                                             cr = Math.Abs(vAmt);
                                             princ = cr;
                                             displayType = "Transfer (Out)";
-                                            if (!string.IsNullOrEmpty(otherBt)) narr = $"Transfer to {otherBt}";
                                         }
                                     }
                                     else if (vType.Equals("Journal", StringComparison.OrdinalIgnoreCase))
@@ -3540,6 +3644,28 @@ namespace JeevikaERP.Controllers
             {
                 using var conn = DbHelper.GetConn();
                 var res = Services.MemberReportService.GetMemberJVRegister(conn, societyId, fyId, fromDate, toDate, wing, fromMember, toMember);
+                return Ok(res);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("member/bill-type-trf-register")]
+        public IActionResult GetBillTypeTransferRegisterApi(
+            [FromQuery] int societyId,
+            [FromQuery] int fyId,
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] string? wing,
+            [FromQuery] string? fromMember,
+            [FromQuery] string? toMember)
+        {
+            try
+            {
+                using var conn = DbHelper.GetConn();
+                var res = Services.MemberReportService.GetBillTypeTransferRegister(conn, societyId, fyId, fromDate, toDate, wing, fromMember, toMember);
                 return Ok(res);
             }
             catch (Exception ex)

@@ -465,22 +465,22 @@
           </table>
         </div>
 
-        <!-- Statutory Signature Section (DOC Format) -->
-        <div class="henu-os-signature-block">
-          <div class="henu-os-sign-left">
-            <div class="henu-os-sign-society">For: ${escHtml(activeSocName)}</div>
-            <div class="henu-os-sign-date">Date: ${escHtml(asOnStr || reportData.asOnDate || '—')}</div>
-            <div class="henu-os-sign-ca">For: (C/A)</div>
-          </div>
-          <div class="henu-os-sign-right">
-            <div style="min-height:48px;">&nbsp;</div>
-            <div class="henu-os-sign-roles">
-              <span>(Proprietor)</span>
-              <span>(Chairman)</span>
-              <span>(Secretary)</span>
+        <!-- Statutory Signature Section (Dynamic from Configuration & Notes Master) -->
+        ${window.ReportFooterHelper ? window.ReportFooterHelper.renderHtml('balance-sheet', activeSocName, asOnStr || reportData.asOnDate) : `
+          <div class="henu-os-signature-block">
+            <div class="henu-os-sign-left">
+              <div class="henu-os-sign-society">For: ${escHtml(activeSocName)}</div>
+              <div class="henu-os-sign-date">Date: ${escHtml(asOnStr || reportData.asOnDate || '—')}</div>
+            </div>
+            <div class="henu-os-sign-right">
+              <div style="min-height:48px;">&nbsp;</div>
+              <div class="henu-os-sign-roles">
+                <span>(Chairman)</span>
+                <span>(Secretary)</span>
+              </div>
             </div>
           </div>
-        </div>
+        `}
       </div>
     `;
 
@@ -942,38 +942,16 @@
       }
     }
 
-    // Left Signature
-    setCell(rSign, 0, `For: ${socName}`, 's', {
-      font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '1a1a1a' } },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    });
-    merges.push({ s: { r: rSign, c: 0 }, e: { r: rSign, c: 3 } });
-
-    setCell(rSign + 1, 0, `Date: ${asOnDateStr}`, 's', {
-      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    });
-    merges.push({ s: { r: rSign + 1, c: 0 }, e: { r: rSign + 1, c: 3 } });
-
-    setCell(rSign + 2, 0, 'For: (C/A)', 's', {
-      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    });
-    merges.push({ s: { r: rSign + 2, c: 0 }, e: { r: rSign + 2, c: 3 } });
-
-    // Right Signatures: (Proprietor), (Chairman), (Secretary)
-    setCell(rSign + 3, 4, '(Proprietor)', 's', {
-      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
-      alignment: { horizontal: 'center', vertical: 'center' }
-    });
-    setCell(rSign + 3, 5, '(Chairman)', 's', {
-      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
-      alignment: { horizontal: 'center', vertical: 'center' }
-    });
-    setCell(rSign + 3, 7, '(Secretary)', 's', {
-      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
-      alignment: { horizontal: 'center', vertical: 'center' }
-    });
+    // Dynamic Footers from Configuration & Notes Master (zero-hardcoding, respects L/R swap)
+    if (window.ReportFooterHelper) {
+      rSign = window.ReportFooterHelper.appendToXlsx(ws, rSign, 'balance-sheet', socName, asOnDateStr, setCell, merges, 7);
+    } else {
+      setCell(rSign, 0, `For: ${socName}`, 's', {
+        font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '1a1a1a' } },
+        alignment: { horizontal: 'left', vertical: 'center' }
+      });
+      merges.push({ s: { r: rSign, c: 0 }, e: { r: rSign, c: 3 } });
+    }
 
     // Sheet Range & Properties
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rSign + 4, c: 7 } });

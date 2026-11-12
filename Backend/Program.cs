@@ -299,7 +299,10 @@ app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "JEEVIKA ERP
 // ── 6. Middleware Pipeline ────────────────────────────────────
 app.UseCors("JeevikaPolicy");
 
-var rootPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, ".."));
+var envWebRoot = Environment.GetEnvironmentVariable("JEEVIKA_WEB_ROOT");
+var rootPath = (!string.IsNullOrEmpty(envWebRoot) && Directory.Exists(envWebRoot))
+    ? envWebRoot
+    : Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, ".."));
 if (Directory.Exists(rootPath))
 {
     app.UseFileServer(new FileServerOptions

@@ -65,6 +65,15 @@
         <span style="font-size:11px; font-weight:600; color:#475569; cursor:pointer; user-select:none;" onclick="document.getElementById('chk-hide-zero').click()">Hide Zero Balances</span>
       </div>
 
+      <div class="rp-filter-item" style="display:flex; align-items:center; gap:6px;">
+        <label class="erp-toggle-switch">
+          <input type="checkbox" id="chk-swap-footer" onchange="toggleRPFooterSwap()">
+          <span class="erp-toggle-slider"></span>
+        </label>
+        <span style="font-size:11px; font-weight:600; color:#475569; cursor:pointer; user-select:none;"
+          onclick="document.getElementById('chk-swap-footer').click()" id="lbl-swap-footer" title="Switch Left/Right Signatures">⇄ Swap Signatures (L/R)</span>
+      </div>
+
       <div class="rp-search-box">
         <i class="bi bi-search"></i>
         <input type="text" id="rp-search-input" class="rp-input" placeholder="Search head / group..." oninput="onSearchInput()">
@@ -197,17 +206,8 @@
         </table>
       </div>
 
-      <!-- Statutory Signatory Section -->
-      <div class="rp-signatory-wrap">
-        <div class="rp-sign-society-label">
-          For <span id="disp-sign-soc-name">CO-OPERATIVE HOUSING SOCIETY LTD.</span>
-        </div>
-        <div class="rp-sign-boxes">
-          <div class="rp-sign-box">Secretary</div>
-          <div class="rp-sign-box">Chairman</div>
-          <div class="rp-sign-box">Treasurer</div>
-        </div>
-      </div>
+      <!-- Statutory Dynamic Signatory Section (Zero-hardcoded from Configuration & Notes Master) -->
+      <div id="rp-dynamic-footer-wrap" style="width:100%; margin-top:20px;"></div>
 
     </div>
   </div>

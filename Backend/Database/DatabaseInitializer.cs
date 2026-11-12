@@ -25,6 +25,11 @@ namespace JeevikaERP.Database
             {
                 rootDir = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), ".."));
             }
+            var envWebRoot = Environment.GetEnvironmentVariable("JEEVIKA_WEB_ROOT");
+            if (!string.IsNullOrEmpty(envWebRoot) && Directory.Exists(Path.Combine(envWebRoot, "Database")))
+            {
+                rootDir = envWebRoot;
+            }
 
             if (providerName.Equals("SQLite", StringComparison.OrdinalIgnoreCase))
             {

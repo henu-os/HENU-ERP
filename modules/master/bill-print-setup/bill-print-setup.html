@@ -375,24 +375,24 @@
             <div class="bps-field-row">
               <label for="bps-format">Default Bill Format</label>
               <select class="bps-select" id="bps-format" tabindex="1">
-                <option value="G01">G01 Half Page</option>
-                <option value="G02">G02 Full Page</option>
-                <option value="GST">GST Bill</option>
-                <option value="Receipt">Bill With Receipt</option>
-                <option value="Thermal">Thermal Receipt</option>
-                <option value="Invoice">Maintenance Invoice</option>
+                <option value="GST_DETAILED">1. GST Format 1 — Full Detailed Tax Invoice</option>
+                <option value="GST_RECEIPT">2. GST Format 2 — Tax Invoice with Receipt Slip</option>
+                <option value="NON_GST">3. Non-GST Format — Standard Maintenance Bill</option>
+                <option value="MARATHI">4. Marathi Format — मराठी देखभाल देयक व पावती</option>
               </select>
             </div>
 
             <div class="bps-field-row">
               <label for="bps-heading">Heading</label>
               <input type="text" class="bps-input" id="bps-heading" list="bps-heading-list" tabindex="2"
-                value="MAINTENANCE BILL">
+                value="TAX INVOICE">
               <datalist id="bps-heading-list">
-                <option value="GST INVOICE">
-                <option value="MAINTENANCE BILL">
                 <option value="TAX INVOICE">
-                <option value="RECEIPT CUM BILL">
+                <option value="TAX INVOICE & RECEIPT">
+                <option value="MAINTENANCE BILL">
+                <option value="BILL OF SUPPLY">
+                <option value="मासिक देखभाल देयक">
+                <option value="देखभाल देयक व पावती">
               </datalist>
             </div>
 
@@ -477,9 +477,19 @@
     (function () {
       'use strict';
 
+      function getActiveSocietyId() {
+        if (window.Auth && typeof Auth.getSocietyId === 'function') {
+          var sid = Auth.getSocietyId();
+          if (sid && sid > 0) return sid;
+        }
+        var s = sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || localStorage.getItem('society_id');
+        return s ? parseInt(s, 10) : 1;
+      }
+
       var initialState = {
-        format: 'G01',
-        heading: 'MAINTENANCE BILL',
+        societyId: getActiveSocietyId(),
+        format: 'GST_DETAILED',
+        heading: 'TAX INVOICE',
         bldg: true,
         srno: true,
         newpage: false,
@@ -522,9 +532,26 @@
         if (state.sign) document.getElementById('bps-sign').value = state.sign;
       }
 
+      // Auto update heading recommendation on format change
+      document.getElementById('bps-format').addEventListener('change', function () {
+        var fmt = this.value;
+        var headingInput = document.getElementById('bps-heading');
+        if (fmt === 'MARATHI') {
+          headingInput.value = 'मासिक देखभाल देयक';
+        } else if (fmt === 'GST_DETAILED') {
+          headingInput.value = 'TAX INVOICE';
+        } else if (fmt === 'GST_RECEIPT') {
+          headingInput.value = 'TAX INVOICE & RECEIPT';
+        } else if (fmt === 'NON_GST') {
+          headingInput.value = 'MAINTENANCE BILL';
+        }
+      });
+
       window.BPS = {
         saveConfig: async function () {
+          var sid = getActiveSocietyId();
           initialState = {
+            societyId: sid,
             format: document.getElementById('bps-format').value,
             heading: document.getElementById('bps-heading').value,
             bldg: document.getElementById('bps-chk-bldg').checked,
@@ -536,20 +563,23 @@
             qr: document.getElementById('bps-qr').value,
             sign: document.getElementById('bps-sign').value
           };
+          localStorage.setItem('jeevika_bps_config_' + sid, JSON.stringify(initialState));
           localStorage.setItem('jeevika_bps_config', JSON.stringify(initialState));
 
           try {
-            await fetch(getApiBase() + '/api/bill-print-setup', {
+            var res = await fetch(getApiBase() + '/api/bill-print-setup', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(initialState)
             });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            toast('Bill Print Settings saved successfully in Database.', true);
           } catch (e) {
-            console.warn("API offline, saved to localStorage.");
+            console.warn("API error, fallback saved to localStorage:", e);
+            toast('Bill Print Settings saved to local cache.', true);
           }
 
-          toast('Bill Print Settings saved globally.', true);
-          document.getElementById('bps-status-msg').innerHTML = '<i class="bi bi-check-circle-fill" style="color:#2E7D32;"></i> Configuration Saved.';
+          document.getElementById('bps-status-msg').innerHTML = '<i class="bi bi-check-circle-fill" style="color:#2E7D32;"></i> Configuration Saved for Society #' + sid + '.';
         },
 
         resetConfig: function () {
@@ -559,44 +589,169 @@
         },
 
         previewBill: function () {
-          var w = window.open('', '_blank', 'width=820,height=680');
+          var w = window.open('', '_blank', 'width=860,height=740');
           if (!w) { toast('Popup blocked. Please allow popups.', false); return; }
 
-          var head = document.getElementById('bps-heading').value || 'SOCIETY BILL';
-          var qrOpt = document.getElementById('bps-qr').value;
+          var head = document.getElementById('bps-heading').value || 'MAINTENANCE BILL';
           var format = document.getElementById('bps-format').value;
+          var showBldg = document.getElementById('bps-chk-bldg').checked;
+          var showSrNo = document.getElementById('bps-chk-srno').checked;
+          var showArrears = document.getElementById('bps-chk-arrears').checked;
+          var showReceipt = document.getElementById('bps-chk-receipt').checked;
+          var qrOpt = document.getElementById('bps-qr').value;
           var signOpt = document.getElementById('bps-sign').value;
 
-          var html = '<!DOCTYPE html><html><head><title>Bill Preview — ' + head + '</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:20px;background:#f9f9f9;} .bill-box{background:#fff;border:1px solid #000;padding:24px;max-width:720px;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,0.1);} h2{text-align:center;text-decoration:underline;margin-bottom:20px;font-size:18px;color:#1565C0;} .details{display:flex;justify-content:space-between;margin-bottom:20px;font-size:12px;line-height:1.5;} table{width:100%;border-collapse:collapse;margin-bottom:20px;} th,td{border:1px solid #000;padding:6px;font-size:12px;} th{background:#e8f0fe;} .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px;height:90px;} .qr{width:90px;height:90px;border:1px solid #999;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:10px;font-weight:bold;text-align:center;} .sign{border-top:1px solid #000;width:160px;text-align:center;padding-top:4px;font-weight:bold;font-size:11px;}</style></head><body>';
+          var isMarathi = format === 'MARATHI';
+          var isGstDetailed = format === 'GST_DETAILED';
+          var isGstReceipt = format === 'GST_RECEIPT';
+          var isNonGst = format === 'NON_GST';
 
+          var css = '<style>' +
+            'body { font-family: ' + (isMarathi ? '"Noto Sans Devanagari", Arial, sans-serif' : 'Arial, sans-serif') + '; font-size:12px; margin:20px; background:#f4f6f9; color:#1a1a2e; }' +
+            '.bill-box { background:#fff; border:1px solid #94a3b8; padding:24px; max-width:760px; margin:0 auto; box-shadow:0 4px 15px rgba(0,0,0,0.1); border-radius:4px; }' +
+            '.soc-header { text-align:center; border-bottom:2px solid #1e3a8a; padding-bottom:8px; margin-bottom:12px; }' +
+            '.soc-name { font-size:16px; font-weight:800; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px; }' +
+            '.soc-meta { font-size:10.5px; color:#475569; margin-top:3px; }' +
+            '.bill-title-bar { background:#1e3a8a; color:#fff; font-weight:bold; font-size:13px; padding:6px 12px; display:flex; justify-content:space-between; border-radius:2px; margin-bottom:12px; }' +
+            '.meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }' +
+            '.meta-box { border:1px solid #cbd5e1; background:#f8fafc; padding:8px 10px; font-size:11.5px; line-height:1.5; border-radius:3px; }' +
+            '.meta-title { font-weight:700; color:#1e3a8a; font-size:10.5px; border-bottom:1px solid #e2e8f0; margin-bottom:4px; padding-bottom:2px; text-transform:uppercase; }' +
+            'table { width:100%; border-collapse:collapse; margin-bottom:12px; font-size:11.5px; }' +
+            'th, td { border:1px solid #cbd5e1; padding:6px 8px; }' +
+            'th { background:#1e3a8a; color:#fff; font-weight:700; text-align:left; font-size:11px; }' +
+            'th.right, td.right { text-align:right; }' +
+            'th.center, td.center { text-align:center; }' +
+            '.total-row { font-weight:bold; background:#e2e8f0; }' +
+            '.summary-grid { display:grid; grid-template-columns:1.2fr 1fr; gap:12px; margin-top:10px; }' +
+            '.summary-box { border:1px solid #cbd5e1; background:#f8fafc; padding:8px 10px; font-size:11px; line-height:1.45; border-radius:3px; }' +
+            '.grand-total { background:#e2e8f0; font-weight:bold; font-size:12.5px; color:#1e3a8a; }' +
+            '.tear-off { border-top:2px dashed #94a3b8; margin:24px 0 16px; padding-top:12px; text-align:center; font-weight:bold; font-size:10px; color:#64748b; letter-spacing:1px; position:relative; }' +
+            '.counterfoil-box { border:1px solid #94a3b8; background:#fff; padding:12px; border-radius:3px; font-size:11px; }' +
+            '.fill-line { display:inline-block; border-bottom:1px solid #64748b; width:180px; height:12px; margin-left:6px; }' +
+            '.footer-sig { display:flex; justify-content:space-between; align-items:flex-end; margin-top:24px; padding-top:8px; border-top:1px solid #e2e8f0; }' +
+            '.qr-box { width:80px; height:80px; border:1px solid #cbd5e1; display:flex; align-items:center; justify-content:center; background:#f1f5f9; font-size:9.5px; font-weight:bold; text-align:center; }' +
+            '.sign-box { border-top:1px solid #1e3a8a; width:150px; text-align:center; padding-top:4px; font-weight:bold; font-size:10.5px; }' +
+            '</style>';
+
+          var docTitle = isMarathi ? 'मासिक देखभाल देयक' : (isGstDetailed ? 'TAX INVOICE' : (isGstReceipt ? 'TAX INVOICE & RECEIPT' : 'MAINTENANCE BILL'));
+          var html = '<!DOCTYPE html><html><head><title>Preview — ' + docTitle + '</title>' + css + '</head><body>';
           html += '<div class="bill-box">';
-          html += '<h2>' + head + ' (' + format + ')</h2>';
-          html += '<div class="details"><div><strong>Member:</strong> Mr. Sharma<br><strong>Flat:</strong> A-101</div><div><strong>Bill No:</strong> 1001<br><strong>Date:</strong> 01-May-2026</div></div>';
 
-          html += '<table><thead><tr><th>Particulars</th><th style="text-align:right;">Amount (₹)</th></tr></thead><tbody>';
-          html += '<tr><td>Maintenance Charges</td><td style="text-align:right;">2,500.00</td></tr>';
-          html += '<tr><td>Sinking Fund</td><td style="text-align:right;">500.00</td></tr>';
-          html += '<tr><td><strong>Total Amount</strong></td><td style="text-align:right;"><strong>3,000.00</strong></td></tr>';
+          // Header
+          html += '<div class="soc-header">';
+          html += '<div class="soc-name">' + (isMarathi ? 'गोकुळधाम सहकारी गृहनिर्माण संस्था मर्यादित' : 'GOKULDHAM CO-OPERATIVE HOUSING SOCIETY LTD.') + '</div>';
+          html += '<div class="soc-meta">' + (isMarathi ? 'नोंदणी क्र.: BOM/HSG/12345/2010 | पॅन: AABTG1234F' : 'Reg. No: BOM/HSG/12345/2010 | PAN: AABTG1234F') + (isGstDetailed || isGstReceipt ? ' | GSTIN: 27AABTG1234F1Z8' : '') + '</div>';
+          html += '<div class="soc-meta">Plot No. 42, Sector 15, Vashi, Navi Mumbai - 400703</div>';
+          html += '</div>';
+
+          // Title Bar
+          html += '<div class="bill-title-bar">';
+          html += '<div>' + head.toUpperCase() + ' (' + format + ')</div>';
+          html += '<div>' + (isMarathi ? 'कालावधी: मे २०२६' : 'Period: May 2026') + '</div>';
+          html += '</div>';
+
+          // Meta Grid
+          html += '<div class="meta-grid">';
+          html += '<div class="meta-box">';
+          html += '<div class="meta-title">' + (isMarathi ? 'सभासदाचा तपशील' : 'Member Details') + '</div>';
+          html += '<div><strong>' + (isMarathi ? 'सभासदाचे नाव' : 'Member Name') + ':</strong> ' + (isMarathi ? 'श्री. रमेश विठ्ठल पाटील' : 'Mr. Ramesh V. Patil') + '</div>';
+          html += '<div><strong>' + (isMarathi ? 'सदनिका क्र.' : 'Flat No.') + ':</strong> A-402 ' + (showBldg ? '(A-Wing / Bldg-1)' : '') + '</div>';
+          html += '<div><strong>' + (isMarathi ? 'क्षेत्रफळ' : 'Area') + ':</strong> 650 Sq.Ft.</div>';
+          html += '</div>';
+
+          html += '<div class="meta-box">';
+          html += '<div class="meta-title">' + (isMarathi ? 'देयक तपशील' : 'Invoice Details') + '</div>';
+          html += '<div><strong>' + (isMarathi ? 'देयक क्रमांक' : 'Bill No.') + ':</strong> INV-2026-0042</div>';
+          html += '<div><strong>' + (isMarathi ? 'देयक दिनांक' : 'Bill Date') + ':</strong> 01-May-2026</div>';
+          html += '<div><strong>' + (isMarathi ? 'अंतिम देय तारीख' : 'Due Date') + ':</strong> <span style="color:#dc2626; font-weight:bold;">15-May-2026</span></div>';
+          html += '</div>';
+          html += '</div>';
+
+          // Items Table
+          html += '<table><thead><tr>';
+          if (showSrNo) html += '<th class="center" style="width:35px;">' + (isMarathi ? 'अ.क्र.' : 'Sr.') + '</th>';
+          html += '<th>' + (isMarathi ? 'खर्चाचा तपशील / लेखा शीर्षक' : 'Particulars / Charge Head') + '</th>';
+          if (isGstDetailed || isGstReceipt) {
+            html += '<th class="center" style="width:70px;">SAC</th>';
+            html += '<th class="right" style="width:85px;">' + (isMarathi ? 'करपात्र रक्कम' : 'Taxable (₹)') + '</th>';
+            html += '<th class="right" style="width:70px;">CGST 9%</th>';
+            html += '<th class="right" style="width:70px;">SGST 9%</th>';
+          }
+          html += '<th class="right" style="width:95px;">' + (isMarathi ? 'रक्कम (₹)' : 'Total (₹)') + '</th>';
+          html += '</tr></thead><tbody>';
+
+          if (isMarathi) {
+            html += '<tr>' + (showSrNo ? '<td class="center">1</td>' : '') + '<td>सामान्य देखभाल आकार (General Maintenance)</td><td class="right">1,800.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">2</td>' : '') + '<td>दुरुस्ती व देखभाल निधी (Repair Fund)</td><td class="right">400.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">3</td>' : '') + '<td>बुडीत निधी (Sinking Fund)</td><td class="right">250.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">4</td>' : '') + '<td>पाणीपट्टी आकार (Water Charges)</td><td class="right">350.00</td></tr>';
+            html += '<tr class="total-row">' + (showSrNo ? '<td></td>' : '') + '<td><strong>एकूण चालू आकारणी (Current Assessment)</strong></td><td class="right"><strong>2,800.00</strong></td></tr>';
+          } else if (isGstDetailed || isGstReceipt) {
+            html += '<tr>' + (showSrNo ? '<td class="center">1</td>' : '') + '<td>Society Maintenance Charges</td><td class="center">999598</td><td class="right">2,000.00</td><td class="right">180.00</td><td class="right">180.00</td><td class="right">2,360.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">2</td>' : '') + '<td>Repair &amp; Maintenance Fund</td><td class="center">999598</td><td class="right">500.00</td><td class="right">45.00</td><td class="right">45.00</td><td class="right">590.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">3</td>' : '') + '<td>Parking Charges</td><td class="center">999598</td><td class="right">300.00</td><td class="right">27.00</td><td class="right">27.00</td><td class="right">354.00</td></tr>';
+            html += '<tr class="total-row">' + (showSrNo ? '<td></td>' : '') + '<td><strong>Sub Total</strong></td><td class="center">-</td><td class="right"><strong>2,800.00</strong></td><td class="right"><strong>252.00</strong></td><td class="right"><strong>252.00</strong></td><td class="right"><strong>3,304.00</strong></td></tr>';
+          } else {
+            html += '<tr>' + (showSrNo ? '<td class="center">1</td>' : '') + '<td>General Maintenance Charges</td><td class="right">2,000.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">2</td>' : '') + '<td>Sinking Fund</td><td class="right">300.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">3</td>' : '') + '<td>Repair Fund</td><td class="right">500.00</td></tr>';
+            html += '<tr>' + (showSrNo ? '<td class="center">4</td>' : '') + '<td>Parking Charges</td><td class="right">200.00</td></tr>';
+            html += '<tr class="total-row">' + (showSrNo ? '<td></td>' : '') + '<td><strong>Total Current Assessment</strong></td><td class="right"><strong>3,000.00</strong></td></tr>';
+          }
           html += '</tbody></table>';
 
-          html += '<div class="footer">';
+          // Summary Grid
+          html += '<div class="summary-grid">';
+          html += '<div class="summary-box">';
+          html += '<div><strong>' + (isMarathi ? 'अक्षरी रक्कम' : 'Amount in Words') + ':</strong> ' + (isMarathi ? 'दोन हजार आठशे रुपये फक्त.' : 'Three Thousand Three Hundred Four Only.') + '</div>';
+          html += '<div style="margin-top:6px;"><strong>' + (isMarathi ? 'बँक तपशील' : 'Bank Payment Info') + ':</strong> HDFC Bank Ltd. | A/C: 50100234567890 | IFSC: HDFC0000123</div>';
+          html += '</div>';
+
+          html += '<div><table>';
+          if (showArrears) {
+            html += '<tr><td>' + (isMarathi ? 'मागील थकबाकी (मुद्दल)' : 'Previous Arrears (Principal)') + ':</td><td class="right">₹ 0.00</td></tr>';
+            html += '<tr><td>' + (isMarathi ? 'मागील थकबाकीवरील व्याज' : 'Interest on Arrears @ 21%') + ':</td><td class="right">₹ 0.00</td></tr>';
+          }
+          html += '<tr class="grand-total"><td><strong>' + (isMarathi ? 'एकूण देय रक्कम' : 'NET PAYABLE') + ':</strong></td><td class="right"><strong>₹ ' + (isMarathi ? '2,800.00' : (isGstDetailed || isGstReceipt ? '3,304.00' : '3,000.00')) + '</strong></td></tr>';
+          html += '</table></div>';
+          html += '</div>';
+
+          // Bottom Tear-off slip (for GST_RECEIPT or if showReceipt toggle is checked)
+          if (isGstReceipt || showReceipt) {
+            html += '<div class="tear-off">✄ - - - - - - - - - - - - - - TEAR-OFF OFFICE COUNTERFOIL / ACKNOWLEDGMENT SLIP - - - - - - - - - - - - - - ✄</div>';
+            html += '<div class="counterfoil-box">';
+            html += '<div style="display:flex; justify-content:space-between; margin-bottom:6px;">';
+            html += '<div><strong>Bill No:</strong> INV-2026-0042 &nbsp;|&nbsp; <strong>Date:</strong> 01-May-2026</div>';
+            html += '<div><strong>Flat:</strong> A-402 &nbsp;|&nbsp; <strong>Member:</strong> Mr. Ramesh V. Patil</div>';
+            html += '</div>';
+            html += '<div style="margin-top:6px;">';
+            html += 'Mode: [ &nbsp; ] Cheque &nbsp; [ &nbsp; ] UPI / NEFT &nbsp; [ &nbsp; ] Cash &nbsp;&nbsp;&nbsp; Cheque/UTR No: <span class="fill-line"></span> Date: <span class="fill-line" style="width:90px;"></span>';
+            html += '</div>';
+            html += '<div style="margin-top:8px; display:flex; justify-content:space-between;">';
+            html += '<div>Bank &amp; Branch: <span class="fill-line" style="width:220px;"></span> &nbsp;&nbsp; Paid Amount: ₹ <strong>' + (isGstDetailed || isGstReceipt ? '3,304.00' : '2,800.00') + '</strong></div>';
+            html += '<div style="text-align:right;">Collector Signature: <span class="fill-line" style="width:120px;"></span></div>';
+            html += '</div>';
+            html += '</div>';
+          }
+
+          // Footer
+          html += '<div class="footer-sig">';
           if (qrOpt !== 'none') {
-            html += '<div class="qr">[' + qrOpt.toUpperCase() + ' QR]</div>';
+            html += '<div class="qr-box">[' + qrOpt.toUpperCase() + ' QR CODE]</div>';
           } else {
             html += '<div></div>';
           }
-
           if (signOpt !== 'none') {
-            html += '<div class="sign">Authorised ' + signOpt.toUpperCase() + '</div>';
+            html += '<div class="sign-box">' + (isMarathi ? 'मा. मानद सचिव / खजिनदार' : 'Hon. Secretary / Treasurer') + '</div>';
           } else {
             html += '<div></div>';
           }
+          html += '</div>';
 
-          html += '</div></div></body></html>';
-
+          html += '</div></body></html>';
           w.document.write(html);
           w.document.close();
-          toast('Generating live ERP bill preview...', true);
+          toast('Displaying live ' + format + ' preview...', true);
         },
 
         action: function (name) {
@@ -636,14 +791,15 @@
       });
 
       async function loadConfig() {
+        var sid = getActiveSocietyId();
         try {
-          var res = await fetch(getApiBase() + '/api/bill-print-setup');
+          var res = await fetch(getApiBase() + '/api/bill-print-setup?societyId=' + sid);
           if (res.ok) {
             var data = await res.json();
             if (data) initialState = data;
           }
         } catch (e) {
-          var saved = localStorage.getItem('jeevika_bps_config');
+          var saved = localStorage.getItem('jeevika_bps_config_' + sid) || localStorage.getItem('jeevika_bps_config');
           if (saved) {
             try { initialState = JSON.parse(saved); } catch (ex) { }
           }
@@ -658,6 +814,29 @@
           var fy = (window.Auth && Auth.getFYLabel && Auth.getFYLabel() !== '—') ? Auth.getFYLabel() : null;
 
           if (!sn || sn === '—') {
+            sn = sessionStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyCode') || null;
+          }
+          if (!fy || fy === '—') {
+            fy = sessionStorage.getItem('activeFYLabel') || localStorage.getItem('activeFYLabel') || '2025-26';
+          }
+
+          if (sn && sn !== '—') {
+            var el = document.getElementById('bpsSocName');
+            if (el) el.textContent = sn;
+          }
+          if (fy && fy !== '—') {
+            var el2 = document.getElementById('bpsFyLabel');
+            if (el2) el2.textContent = fy;
+          }
+        }
+
+        syncHeaderContext();
+        setTimeout(syncHeaderContext, 100);
+        setTimeout(syncHeaderContext, 400);
+
+        loadConfig();
+        document.getElementById('bps-format').focus();
+      })();
             sn = sessionStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyCode') || null;
           }
           if (!fy || fy === '—') {

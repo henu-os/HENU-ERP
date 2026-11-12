@@ -371,6 +371,11 @@ function buildTrialBalanceSchedules(fmt, options, customSource) {
 
 // ── MODERN JEEVIKA ERP TABLE RENDERER ─────────────────────────
 function renderTable(schedules, fmt, options) {
+  const chkSwap = document.getElementById('chk-swap-footer');
+  if (chkSwap && window.ReportFooterHelper) {
+    chkSwap.checked = window.ReportFooterHelper.isSwapped('trial-balance');
+  }
+
   const tbody = document.getElementById('mainTableBody');
   const thead = document.querySelector('#mainTable thead');
   const tfoot = document.querySelector('#mainTable tfoot');
@@ -646,7 +651,27 @@ function renderTable(schedules, fmt, options) {
   }
 
   updateKPIs(totalAccountsCount, totOpDr, totOpCr, totTxnDr, totTxnCr, totClDr, totClCr);
+  renderTBDynamicFooters();
 }
+
+function renderTBDynamicFooters() {
+  const footWrap = document.getElementById('tb-dynamic-footer-wrap');
+  if (!footWrap) return;
+  if (window.ReportFooterHelper) {
+    const socName = (window.Auth && Auth.getSocietyName && Auth.getSocietyName() !== '—') ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'CO-OPERATIVE HOUSING SOCIETY LTD.');
+    const toDate = document.getElementById('toDate')?.value || _fyEndDate || '';
+    footWrap.innerHTML = window.ReportFooterHelper.renderHtml('trial-balance', socName, toDate);
+  }
+}
+
+window.toggleTBFooterSwap = function () {
+  if (window.ReportFooterHelper) {
+    const swapped = window.ReportFooterHelper.toggle('trial-balance');
+    const chk = document.getElementById('chk-swap-footer');
+    if (chk) chk.checked = swapped;
+  }
+  renderTBDynamicFooters();
+};
 
 function updateKPIs(accCount, opDr, opCr, txnDr, txnCr, clDr, clCr) {
   const accCountText = `${accCount} Accounts`;
@@ -896,6 +921,14 @@ function exportExcelFormatted(fmt, options) {
       gtClDr.toFixed(2),
       gtClCr.toFixed(2)
     ].join(','));
+  }
+
+  // Dynamic footers from Configuration & Notes Master
+  if (window.ReportFooterHelper) {
+    const socName = (window.Auth && Auth.getSocietyName && Auth.getSocietyName() !== '—') ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'CO-OPERATIVE HOUSING SOCIETY LTD.');
+    const toDate = document.getElementById('toDate')?.value || _fyEndDate || '';
+    const totalCols = (fmt === 'full') ? 8 : 4;
+    ReportFooterHelper.appendToCsv(csvRows, 'trial-balance', socName, toDate, totalCols);
   }
 
   const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });

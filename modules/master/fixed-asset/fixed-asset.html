@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fixed Asset Management & Depreciation Automation — JEEVIKA ERP</title>
+  <script src="../../../config.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="fixed-asset.css">
+</head>
+<body>
+  <div class="fa-container">
+    <!-- MODULE HEADER -->
+    <header class="fa-header">
+      <div class="fa-header-left">
+        <div class="fa-icon-badge"><i class="bi bi-laptop"></i></div>
+        <div>
+          <h2>Fixed Asset Management &amp; Depreciation Automation</h2>
+          <div class="fa-subtitle">
+            Net Balance Calculation Flow with 3-Tier Sub Accounts (Additions &amp; Depreciation)
+          </div>
+        </div>
+      </div>
+      <div class="fa-header-right">
+        <div class="fa-meta-pill" id="fa-society-pill">
+          <i class="bi bi-building"></i> <span id="fa-society-name">Loading Society...</span>
+        </div>
+        <div class="fa-meta-pill" id="fa-fy-pill">
+          <i class="bi bi-calendar3"></i> <span id="fa-fy-label">FY 2026-27</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- KPI SUMMARY BAR -->
+    <div class="fa-kpi-bar">
+      <div class="fa-kpi-card">
+        <div class="fa-kpi-title">TOTAL ASSETS</div>
+        <div class="fa-kpi-val" id="kpi-total-assets">0</div>
+        <div class="fa-kpi-sub" id="kpi-categories">0 Categories</div>
+      </div>
+      <div class="fa-kpi-card">
+        <div class="fa-kpi-title">OPENING GROSS COST</div>
+        <div class="fa-kpi-val" id="kpi-opening-cost">₹ 0.00</div>
+        <div class="fa-kpi-sub" id="kpi-opening-wdv">Opening WDV: ₹ 0.00</div>
+      </div>
+      <div class="fa-kpi-card green-accent">
+        <div class="fa-kpi-title"><i class="bi bi-plus-circle"></i> ADDITIONS (DURING YEAR)</div>
+        <div class="fa-kpi-val" id="kpi-additions">₹ 0.00</div>
+        <div class="fa-kpi-sub">From Additions Sub-Account</div>
+      </div>
+      <div class="fa-kpi-card purple-accent">
+        <div class="fa-kpi-title"><i class="bi bi-dash-circle"></i> DEPRECIATION (DURING YEAR)</div>
+        <div class="fa-kpi-val" id="kpi-depreciation">₹ 0.00</div>
+        <div class="fa-kpi-sub" id="kpi-dep-status">Pending Calculation</div>
+      </div>
+      <div class="fa-kpi-card blue-accent">
+        <div class="fa-kpi-title">NET BOOK VALUE (CLOSING)</div>
+        <div class="fa-kpi-val" id="kpi-net-balance">₹ 0.00</div>
+        <div class="fa-kpi-sub">Cost + Additions − Depreciation</div>
+      </div>
+    </div>
+
+    <!-- MAIN TOOLBAR & CONTROLS -->
+    <div class="fa-toolbar">
+      <div class="fa-toolbar-left">
+        <button class="fa-btn fa-btn-primary" onclick="openNewAssetModal()">
+          <i class="bi bi-plus-lg"></i> New Asset
+        </button>
+        <button class="fa-btn fa-btn-success" id="btn-calc-net" onclick="runCalculateNetBalance()">
+          <i class="bi bi-lightning-charge-fill"></i> Calculate Net Balance
+        </button>
+        <button class="fa-btn fa-btn-purple" onclick="openDepreciationModal()">
+          <i class="bi bi-calculator"></i> Calculate &amp; Post Depreciation
+        </button>
+        <div class="fa-btn-group">
+          <button class="fa-btn fa-btn-outline" onclick="exportAssetScheduleExcel()">
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+          </button>
+          <button class="fa-btn fa-btn-outline" onclick="printAssetSchedule()">
+            <i class="bi bi-printer"></i> Print Schedule
+          </button>
+        </div>
+      </div>
+      <div class="fa-toolbar-right">
+        <div class="fa-search-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="fa-search-input" placeholder="Search by Asset Name, Code, Account..." oninput="handleAssetSearch(this.value)">
+        </div>
+        <select id="fa-category-filter" class="fa-select" onchange="filterByCategory(this.value)">
+          <option value="ALL">All Categories</option>
+          <option value="Computer &amp; Equipment">Computer &amp; Equipment</option>
+          <option value="Furniture &amp; Fixtures">Furniture &amp; Fixtures</option>
+          <option value="Plant &amp; Machinery">Plant &amp; Machinery</option>
+          <option value="Electrical Installations">Electrical Installations</option>
+          <option value="Vehicles">Vehicles</option>
+          <option value="Office Equipment">Office Equipment</option>
+          <option value="Immovable Property">Immovable Property</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- TAB NAVIGATION -->
+    <div class="fa-tabs">
+      <button class="fa-tab-btn active" onclick="switchFaTab('grid')">
+        <i class="bi bi-table"></i> Asset Schedule &amp; Balances
+      </button>
+      <button class="fa-tab-btn" onclick="switchFaTab('ledger')">
+        <i class="bi bi-diagram-3"></i> 3-Tier Ledger Flow (ERP View)
+      </button>
+      <button class="fa-tab-btn" onclick="switchFaTab('logs')">
+        <i class="bi bi-clock-history"></i> Depreciation History &amp; Vouchers
+      </button>
+    </div>
+
+    <!-- TAB 1: ASSET SCHEDULE & BALANCES (MAIN GRID) -->
+    <div class="fa-tab-content active" id="tab-grid">
+      <div class="fa-table-wrap">
+        <table class="fa-table" id="fa-main-table">
+          <thead>
+            <tr>
+              <th style="width: 45px;">#</th>
+              <th style="width: 90px;">Asset Code</th>
+              <th>Asset Name</th>
+              <th>Category</th>
+              <th style="width: 100px;">Purchase Date</th>
+              <th style="width: 95px;">Method &amp; Rate</th>
+              <th style="text-align: right; width: 125px;">Opening Cost (₹)</th>
+              <th style="text-align: right; width: 125px;">Additions FY (₹)</th>
+              <th style="text-align: right; width: 125px;">Total Cost (₹)</th>
+              <th style="text-align: right; width: 125px;">Depreciation FY (₹)</th>
+              <th style="text-align: right; width: 130px;">Net Book Value (₹)</th>
+              <th style="width: 160px;">Linked Accounts</th>
+              <th style="width: 100px; text-align: center;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="fa-table-body">
+            <tr>
+              <td colspan="13" class="fa-empty-state">
+                <i class="bi bi-inbox"></i> Loading assets and calculating balances...
+              </td>
+            </tr>
+          </tbody>
+          <tfoot id="fa-table-foot" style="display: none;">
+            <tr class="fa-total-row">
+              <td colspan="6"><strong>TOTAL FIXED ASSETS</strong></td>
+              <td style="text-align: right;" id="tot-op-cost">₹ 0.00</td>
+              <td style="text-align: right;" id="tot-additions">₹ 0.00</td>
+              <td style="text-align: right;" id="tot-gross-cost">₹ 0.00</td>
+              <td style="text-align: right;" id="tot-depreciation">₹ 0.00</td>
+              <td style="text-align: right;" id="tot-net-balance">₹ 0.00</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: 3-TIER LEDGER FLOW (MATCHING SECTION 7 OF SPEC) -->
+    <div class="fa-tab-content" id="tab-ledger">
+      <div class="fa-ledger-panel">
+        <div class="fa-ledger-selector-strip">
+          <label><i class="bi bi-laptop"></i> Select Asset to Inspect 3-Tier Ledgers:</label>
+          <select id="fa-ledger-asset-select" class="fa-select" onchange="renderAssetLedgerFlow(this.value)">
+            <option value="">-- Choose an Asset --</option>
+          </select>
+        </div>
+
+        <div id="fa-ledger-view-container">
+          <div class="fa-empty-state" style="padding: 40px;">
+            <i class="bi bi-diagram-3" style="font-size: 32px; color: #94a3b8;"></i>
+            <div style="font-size: 14px; font-weight: 600; margin-top: 10px;">Select an asset above to view its 3-Tier Ledger Flow</div>
+            <div style="color: #64748b; font-size: 11px; margin-top: 4px;">Inspect Main Asset Account, Additions During Year Sub-Account, and Depreciation Sub-Account.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: DEPRECIATION HISTORY & LOGS -->
+    <div class="fa-tab-content" id="tab-logs">
+      <div class="fa-table-wrap">
+        <table class="fa-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">Log ID</th>
+              <th>Asset Name</th>
+              <th>Period</th>
+              <th style="text-align: right;">Gross Cost (₹)</th>
+              <th style="text-align: right;">Additions (₹)</th>
+              <th style="text-align: right;">Rate &amp; Method</th>
+              <th style="text-align: right;">Depreciation Posted (₹)</th>
+              <th style="text-align: right;">Net Book Value (₹)</th>
+              <th>Voucher No</th>
+              <th>Posted Date &amp; Time</th>
+            </tr>
+          </thead>
+          <tbody id="fa-logs-tbody">
+            <tr>
+              <td colspan="10" class="fa-empty-state">No depreciation runs recorded yet for this financial year.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL: NEW / EDIT ASSET MASTER -->
+  <div class="fa-modal-overlay" id="modal-asset-form" style="display: none;">
+    <div class="fa-modal-box">
+      <div class="fa-modal-header">
+        <h3 id="modal-asset-title"><i class="bi bi-plus-circle-fill"></i> Add New Fixed Asset</h3>
+        <button class="fa-close-btn" onclick="closeAssetModal()">&times;</button>
+      </div>
+      <div class="fa-modal-body">
+        <form id="frm-asset" onsubmit="handleAssetFormSubmit(event)">
+          <input type="hidden" id="asset-form-id" value="">
+          
+          <div class="fa-form-grid">
+            <div class="fa-form-group">
+              <label>Asset Code <span class="req">*</span></label>
+              <input type="text" id="inp-asset-code" class="fa-input" placeholder="e.g. FA-001 (Leave blank to auto-generate)">
+            </div>
+            <div class="fa-form-group">
+              <label>Asset Name <span class="req">*</span></label>
+              <input type="text" id="inp-asset-name" class="fa-input" placeholder="e.g. Computer System, CCTV Camera" required oninput="updateAccountPreview(this.value)">
+            </div>
+          </div>
+
+          <div class="fa-form-grid">
+            <div class="fa-form-group">
+              <label>Asset Category <span class="req">*</span></label>
+              <input type="text" list="category-suggestions" id="inp-asset-cat" class="fa-input" placeholder="e.g. Computer & Equipment" required>
+              <datalist id="category-suggestions">
+                <option value="Computer & Equipment">
+                <option value="Furniture & Fixtures">
+                <option value="Plant & Machinery">
+                <option value="Electrical Installations">
+                <option value="Vehicles">
+                <option value="Office Equipment">
+                <option value="Immovable Property">
+              </datalist>
+            </div>
+            <div class="fa-form-group">
+              <label>Purchase Date</label>
+              <input type="date" id="inp-purchase-date" class="fa-input">
+            </div>
+          </div>
+
+          <div class="fa-form-grid three-col">
+            <div class="fa-form-group">
+              <label>Depreciation Method <span class="req">*</span></label>
+              <select id="inp-dep-method" class="fa-select" required>
+                <option value="SLM">Straight Line Method (SLM)</option>
+                <option value="WDV">Written Down Value (WDV)</option>
+              </select>
+            </div>
+            <div class="fa-form-group">
+              <label>Depreciation Rate (%) <span class="req">*</span></label>
+              <input type="number" id="inp-dep-rate" class="fa-input" step="0.01" min="0" max="100" placeholder="e.g. 15.00" required oninput="calcHalfRate(this.value)">
+            </div>
+            <div class="fa-form-group">
+              <label>Half-Year Rate (%) <small>(<=180 Days)</small></label>
+              <input type="number" id="inp-half-rate" class="fa-input" step="0.01" min="0" max="100" placeholder="e.g. 7.50">
+            </div>
+          </div>
+
+          <div class="fa-form-grid three-col">
+            <div class="fa-form-group">
+              <label>Useful Life (Years)</label>
+              <input type="number" id="inp-useful-life" class="fa-input" min="0" max="100" placeholder="e.g. 3, 5, 10">
+            </div>
+            <div class="fa-form-group">
+              <label>Opening Gross Cost (₹)</label>
+              <input type="number" id="inp-opening-cost" class="fa-input" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="fa-form-group">
+              <label>Opening Depreciation (₹)</label>
+              <input type="number" id="inp-opening-dep" class="fa-input" step="0.01" min="0" placeholder="0.00">
+            </div>
+          </div>
+
+          <div class="fa-form-group">
+            <label>Remarks / Notes</label>
+            <input type="text" id="inp-remarks" class="fa-input" placeholder="e.g. Located at Society Office, Serial No. XYZ">
+          </div>
+
+          <!-- AUTOMATED ACCOUNT STRUCTURE PREVIEW -->
+          <div class="fa-account-preview-box">
+            <div class="fa-preview-title">
+              <i class="bi bi-diagram-3-fill"></i> Automated 3-Tier Account Structure
+            </div>
+            <div class="fa-preview-desc">
+              When you save, the ERP will automatically create and link the following 3 accounts under <strong>Fixed Assets</strong>:
+            </div>
+            <div class="fa-preview-tree">
+              <div class="fa-tree-node main-node">
+                <i class="bi bi-folder-fill"></i> <strong>Main Account:</strong> <span id="prev-main-acc">Computer System</span> (Fixed Asset)
+              </div>
+              <div class="fa-tree-node sub-node">
+                <i class="bi bi-plus-circle-fill text-green"></i> <strong>Sub-Account 1:</strong> <span id="prev-add-acc">Computer System - Additions During Year</span> (Fixed Asset)
+              </div>
+              <div class="fa-tree-node sub-node">
+                <i class="bi bi-dash-circle-fill text-purple"></i> <strong>Sub-Account 2:</strong> <span id="prev-dep-acc">Computer System - Depreciation During Year</span> (Contra Asset)
+              </div>
+            </div>
+          </div>
+
+          <div class="fa-modal-footer">
+            <button type="button" class="fa-btn fa-btn-outline" onclick="closeAssetModal()">Cancel</button>
+            <button type="submit" class="fa-btn fa-btn-primary" id="btn-save-asset"><i class="bi bi-check-circle-fill"></i> Save Asset &amp; Create Accounts</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DEPRECIATION CALCULATION & POSTING -->
+  <div class="fa-modal-overlay" id="modal-dep-calc" style="display: none;">
+    <div class="fa-modal-box large">
+      <div class="fa-modal-header">
+        <h3><i class="bi bi-calculator"></i> Calculate &amp; Post Depreciation</h3>
+        <button class="fa-close-btn" onclick="closeDepreciationModal()">&times;</button>
+      </div>
+      <div class="fa-modal-body">
+        <div class="fa-calc-meta-bar">
+          <div><strong>Financial Year:</strong> <span id="dep-calc-fy">2026-27</span></div>
+          <div><strong>Period:</strong> <span id="dep-calc-period">01-04-2026 to 31-03-2027</span></div>
+          <div><strong>Method Applied:</strong> SLM &amp; WDV as per Asset Master (with 180-day pro-rata rule)</div>
+        </div>
+
+        <div class="fa-calc-warning" id="dep-calc-warning" style="display: none;">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <span>Depreciation for this Financial Year has already been posted! Posting again will update the Journal Voucher.</span>
+        </div>
+
+        <div class="fa-table-wrap" style="max-height: 280px; overflow-y: auto;">
+          <table class="fa-table">
+            <thead>
+              <tr>
+                <th>Asset Code &amp; Name</th>
+                <th>Category</th>
+                <th style="text-align: right;">Opening (₹)</th>
+                <th style="text-align: right;">Additions (₹)</th>
+                <th style="text-align: center;">Rate &amp; Method</th>
+                <th style="text-align: right;">Depreciation Amount (₹)</th>
+                <th style="text-align: right;">Resulting Net Balance (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="dep-calc-preview-tbody">
+              <tr><td colspan="7" class="fa-empty-state">Calculating depreciation...</td></tr>
+            </tbody>
+            <tfoot>
+              <tr class="fa-total-row">
+                <td colspan="5"><strong>TOTAL DEPRECIATION TO POST</strong></td>
+                <td style="text-align: right;" id="dep-calc-total-amt">₹ 0.00</td>
+                <td style="text-align: right;" id="dep-calc-total-nbv">₹ 0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="fa-jv-preview-box">
+          <div class="fa-preview-title"><i class="bi bi-receipt"></i> Accounting Journal Voucher Preview (To be posted):</div>
+          <div class="fa-jv-legs">
+            <div class="fa-jv-leg dr">
+              <span><strong>Debit:</strong> [EXP-1028] Depreciation Expense</span>
+              <strong id="jv-dr-amt">₹ 0.00</strong>
+            </div>
+            <div class="fa-jv-leg cr">
+              <span><strong>Credit:</strong> Respective Asset Depreciation Sub-Accounts</span>
+              <strong id="jv-cr-amt">₹ 0.00</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="fa-overwrite-check" id="box-overwrite" style="display: none;">
+          <label>
+            <input type="checkbox" id="chk-overwrite">
+            <strong>Overwrite existing depreciation entry:</strong> Replace previous depreciation Journal Voucher with these recalculations.
+          </label>
+        </div>
+
+        <div class="fa-modal-footer">
+          <button type="button" class="fa-btn fa-btn-outline" onclick="closeDepreciationModal()">Close</button>
+          <button type="button" class="fa-btn fa-btn-purple" id="btn-post-dep" onclick="executePostDepreciation()">
+            <i class="bi bi-check2-circle"></i> Confirm &amp; Post Journal Voucher
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT INCLUDES -->
+  <script src="../../../assets/js/api.js?v=20261102_1835"></script>
+  <script src="../../../assets/js/auth.js?v=20261102_1835"></script>
+  <script src="../../../assets/js/utils.js?v=20261102_1835"></script>
+  <script src="../../../assets/js/xlsx-js-style.bundle.js"></script>
+  <script src="fixed-asset.js?v=20261102_1835"></script>
+</body>
+</html>

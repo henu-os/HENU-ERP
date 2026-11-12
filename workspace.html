@@ -78,20 +78,55 @@
       font-weight: 700;
       color: #0f172a;
       background: #f1f5f9;
-      padding: 4px 12px;
+      padding: 4px 10px;
       border-radius: 6px;
       border: 1px solid #cbd5e1;
-      max-width: 360px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      flex-shrink: 0;
+      max-width: min(520px, 42vw);
+      min-width: 0;
+      flex-shrink: 1;
       margin-left: 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .erp-soc-header-badge:hover {
+      background: #e2e8f0;
+      border-color: #94a3b8;
     }
 
     .erp-soc-header-badge i {
       color: #1565C0;
       font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .erp-soc-header-badge i.bi-chevron-down {
+      color: #64748b;
+      font-size: 10px;
+      margin-left: 2px;
+      flex-shrink: 0;
+    }
+
+    #topSocietyName {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+      flex: 1 1 auto;
+    }
+
+    #topSocietyName .erp-soc-name-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    #topSocietyName .erp-soc-mode-tag {
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .erp-header-center {
@@ -621,7 +656,7 @@
 
       <div class="erp-soc-header-badge" onclick="toggleSocietyPicker()" style="cursor:pointer;" title="Click to switch Viewing Society">
         <i class="bi bi-building"></i>
-        <span id="topSocietyName">HENU SOCIETY</span>
+        <span id="topSocietyName"><span class="erp-soc-name-text">HENU SOCIETY</span></span>
         <i class="bi bi-chevron-down" style="font-size: 10px; margin-left: 2px;"></i>
       </div>
 
@@ -727,6 +762,10 @@
             <button type="button" class="dash-action-pill" onclick="WorkspaceManager.openModule('journal-voucher')">
               <i class="bi bi-journal-plus"></i>
               <span>+ Journal Voucher</span>
+            </button>
+            <button type="button" class="dash-action-pill" onclick="WorkspaceManager.openModule('fixed-asset')">
+              <i class="bi bi-laptop"></i>
+              <span>Fixed Assets</span>
             </button>
             <button type="button" class="dash-action-pill" onclick="WorkspaceManager.openModule('contra-entry')">
               <i class="bi bi-arrow-left-right"></i>
@@ -1068,9 +1107,10 @@
 
       const topSoc = document.getElementById('topSocietyName');
       if (topSoc) {
+        topSoc.title = socName;
         topSoc.innerHTML = isViewOnly
-          ? `${socName} <span style="margin-left:6px; font-size:10px; background:#F59E0B; color:#000; padding:1px 6px; border-radius:3px; font-weight:bold;">VIEW ONLY</span>`
-          : `${socName} <span style="margin-left:6px; font-size:10px; background:#10B981; color:#fff; padding:1px 6px; border-radius:3px; font-weight:bold;">ACTIVE</span>`;
+          ? `<span class="erp-soc-name-text">${socName}</span> <span class="erp-soc-mode-tag view-only" style="margin-left:6px; font-size:10px; background:#F59E0B; color:#000; padding:1px 6px; border-radius:3px; font-weight:bold; flex-shrink:0;">VIEW ONLY</span>`
+          : `<span class="erp-soc-name-text">${socName}</span> <span class="erp-soc-mode-tag active" style="margin-left:6px; font-size:10px; background:#10B981; color:#fff; padding:1px 6px; border-radius:3px; font-weight:bold; flex-shrink:0;">ACTIVE</span>`;
       }
       const topFY = document.getElementById('topFYLabel');
       if (topFY) topFY.textContent = fyLabel;

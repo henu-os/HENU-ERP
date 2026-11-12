@@ -535,9 +535,9 @@
         margin-bottom: 10px;
         border-bottom: 1.5px solid #0f172a;
       }
-      .print-signatures {
-        display: flex !important;
-        justify-content: space-between;
+      .print-signatures,
+      #tb-dynamic-footer-wrap {
+        display: block !important;
         margin-top: 35px;
         padding-top: 15px;
         page-break-inside: avoid !important;
@@ -607,7 +607,51 @@
       }
     }
     .print-header { display: none; }
-    .print-signatures { display: none; }
+    .print-signatures,
+    #tb-dynamic-footer-wrap { display: none; }
+
+    /* ERP Toggle Switch */
+    .erp-toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 30px;
+      height: 16px;
+      cursor: pointer;
+      vertical-align: middle;
+      user-select: none;
+    }
+    .erp-toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    .erp-toggle-slider {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #cbd5e1;
+      border-radius: 20px;
+      transition: all 0.2s ease;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+    }
+    .erp-toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 2px;
+      bottom: 2px;
+      background-color: #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+      transition: all 0.2s ease;
+    }
+    .erp-toggle-switch input:checked + .erp-toggle-slider {
+      background-color: #0D47A1;
+    }
+    .erp-toggle-switch input:checked + .erp-toggle-slider:before {
+      transform: translateX(14px);
+    }
   </style>
 </head>
 <body class="erp-module">
@@ -751,6 +795,16 @@
           </div>
         </div>
       </div>
+
+      <!-- Footer Swap Toggle -->
+      <div class="filter-item" style="display:flex; align-items:center; gap:6px; padding-bottom:6px;">
+        <label class="erp-toggle-switch">
+          <input type="checkbox" id="chk-swap-footer" onchange="toggleTBFooterSwap()">
+          <span class="erp-toggle-slider"></span>
+        </label>
+        <span style="font-size:11px; font-weight:700; color:#475569; cursor:pointer; user-select:none;"
+          onclick="document.getElementById('chk-swap-footer').click()" id="lbl-swap-footer" title="Switch Left/Right Signatures">⇄ Swap Signatures (L/R)</span>
+      </div>
     </div>
   </div>
 
@@ -821,21 +875,8 @@
     </table>
   </div>
 
-  <!-- PRINT SIGNATURE BLOCK -->
-  <div class="print-signatures">
-    <div style="text-align:center; width:180px; border-top:1px solid #64748b; font-size:11px; padding-top:4px;">
-      Prepared By
-    </div>
-    <div style="text-align:center; width:180px; border-top:1px solid #64748b; font-size:11px; padding-top:4px;">
-      Checked By / Accountant
-    </div>
-    <div style="text-align:center; width:180px; border-top:1px solid #64748b; font-size:11px; padding-top:4px;">
-      Hon. Secretary / Treasurer
-    </div>
-    <div style="text-align:center; width:180px; border-top:1px solid #64748b; font-size:11px; padding-top:4px;">
-      Statutory Auditor
-    </div>
-  </div>
+  <!-- DYNAMIC STATUTORY SIGNATORY BLOCK (Zero-hardcoded from Configuration & Notes Master) -->
+  <div id="tb-dynamic-footer-wrap" style="margin:24px 20px; page-break-inside:avoid; break-inside:avoid;"></div>
 
   <!-- EXPORT & PRINT FORMAT SELECTOR MODAL -->
   <div class="tb-modal-overlay" id="modal-tb-export" onclick="onModalOverlayClick(event)">

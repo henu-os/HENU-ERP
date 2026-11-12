@@ -160,7 +160,9 @@ namespace JeevikaERP.Controllers
                            a.PrBal, a.PrDrCr,
                            a.ClBal, a.DepAnnual, a.DepHalf, a.AccAddress, a.AccPAN, a.AccTAN,
                            a.GSTIN, a.Mobile, a.Mobile2, a.Email, a.TdsRate, a.TdsSection,
-                           a.IsDefault, a.IsDeleted, a.CreatedAt
+                           a.ParentAccountId, a.AssetId, a.AccountSubType,
+
+                            a.IsDefault, a.IsDeleted, a.CreatedAt
                     FROM jeevika_erp.SocAccount a
                     LEFT JOIN jeevika_erp.SocGroup g ON a.GroupId = g.GroupId
                     LEFT JOIN jeevika_erp.SocOpeningBalance ob ON a.AccountId = ob.AccountId AND ob.FYId = @fyid
@@ -227,7 +229,9 @@ namespace JeevikaERP.Controllers
                            a.PrBal, a.PrDrCr,
                            a.ClBal, a.DepAnnual, a.DepHalf, a.AccAddress, a.AccPAN, a.AccTAN,
                            a.GSTIN, a.Mobile, a.Mobile2, a.Email, a.TdsRate, a.TdsSection,
-                           a.IsDefault, a.IsDeleted, a.CreatedAt
+                           a.ParentAccountId, a.AssetId, a.AccountSubType,
+
+                            a.IsDefault, a.IsDeleted, a.CreatedAt
                     FROM jeevika_erp.SocAccount a
                     LEFT JOIN jeevika_erp.SocGroup g ON a.GroupId = g.GroupId
                     LEFT JOIN jeevika_erp.SocOpeningBalance ob ON a.AccountId = ob.AccountId AND ob.FYId = @fyid
@@ -810,6 +814,9 @@ namespace JeevikaERP.Controllers
                 email       = S("Email"),
                 tdsRate     = Get<decimal>("TdsRate"),
                 tdsSection  = S("TdsSection"),
+                parentAccountId = r["ParentAccountId"] == DBNull.Value ? (int?)null : Convert.ToInt32(r["ParentAccountId"]),
+                assetId         = r["AssetId"] == DBNull.Value ? (int?)null : Convert.ToInt32(r["AssetId"]),
+                accountSubType  = S("AccountSubType"),
                 isDefault   = isDef,
                 isDeleted   = Get<bool>("IsDeleted"),
                 createdAt   = Get<DateTime>("CreatedAt")
@@ -869,6 +876,9 @@ namespace JeevikaERP.Controllers
         public string?  Email      { get; set; }
         public decimal  TdsRate    { get; set; } = 0;
         public string?  TdsSection { get; set; }
+        public int?     ParentAccountId { get; set; }
+        public int?     AssetId         { get; set; }
+        public string?  AccountSubType  { get; set; }
         public int?     FYId       { get; set; }
     }
 }

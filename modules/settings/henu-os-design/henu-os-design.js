@@ -1454,6 +1454,14 @@
           </div>
         ` : ''}
 
+        <!-- Statutory Terms Block -->
+        <div style="margin-top:12px; margin-bottom:12px; padding:6px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; font-size:7pt; color:#64748b; line-height:1.4;">
+          <div style="font-weight:700; color:#1e293b; margin-bottom:2px;">TERMS &amp; CONDITIONS (HOUSING SOCIETY BYE-LAWS):</div>
+          <div>1. Please pay on or before Due Date to avoid delayed payment interest charges.</div>
+          <div>2. As per Co-operative Housing Society Bye-Law No. 68, simple interest @ 21% p.a. is applicable on overdue principal after the due date.</div>
+          <div>3. Cheques / Drafts are accepted subject to realization.</div>
+        </div>
+
         ${cfg.showFooter ? `
           <footer style="margin-top:16px; font-size:7.5pt; color:#64748b; display:flex; justify-content:space-between; border-top:${cfg.footerBorder ? '1px solid #e2e8f0' : 'none'}; padding-top:6px;">
             <div>${cfg.showGeneratedDate ? 'Generated: ' + new Date().toLocaleString('en-IN') : ''}</div>

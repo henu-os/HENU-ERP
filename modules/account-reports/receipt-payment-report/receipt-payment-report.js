@@ -255,6 +255,11 @@
   };
 
   window.renderRPView = function () {
+    const chkSwap = document.getElementById('chk-swap-footer');
+    if (chkSwap && window.ReportFooterHelper) {
+      chkSwap.checked = window.ReportFooterHelper.isSwapped('receipt-payment');
+    }
+
     if (!rawReportData) return;
 
     const data = rawReportData;
@@ -546,6 +551,28 @@
     const footPay = document.getElementById('foot-tot-payments-side');
     if (footRec) footRec.textContent = formatCurrency(data.grandTotalReceiptSide);
     if (footPay) footPay.textContent = formatCurrency(data.grandTotalPaymentSide);
+
+    // Render Dynamic Signatures / Footers from Configuration & Notes Master
+    renderRPDynamicFooters();
+  };
+
+  function renderRPDynamicFooters() {
+    const footWrap = document.getElementById('rp-dynamic-footer-wrap');
+    if (!footWrap) return;
+    if (window.ReportFooterHelper) {
+      const socName = (window.Auth && Auth.getSocietyName && Auth.getSocietyName() !== '—') ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'CO-OPERATIVE HOUSING SOCIETY LTD.');
+      const toDate = document.getElementById('rp-to-date')?.value || '';
+      footWrap.innerHTML = window.ReportFooterHelper.renderHtml('receipt-payment', socName, toDate);
+    }
+  }
+
+  window.toggleRPFooterSwap = function () {
+    if (window.ReportFooterHelper) {
+      const swapped = window.ReportFooterHelper.toggle('receipt-payment');
+      const chk = document.getElementById('chk-swap-footer');
+      if (chk) chk.checked = swapped;
+    }
+    renderRPDynamicFooters();
   };
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -758,6 +785,13 @@
       { s: { r: 4, c: 0 }, e: { r: 4, c: 2 } },
       { s: { r: 4, c: 3 }, e: { r: 4, c: 5 } }
     ];
+
+    // Dynamic Footers from Configuration & Notes Master
+    if (window.ReportFooterHelper) {
+      const rFooterStart = wsData.length + 2;
+      const toDate = data.toDateDisplay || data.toDate || '';
+      ReportFooterHelper.appendToXlsx(ws, rFooterStart, 'receipt-payment', socName, toDate, null, ws['!merges'], 5);
+    }
 
     ws['!cols'] = [
       { wch: 38 }, { wch: 16 }, { wch: 18 },

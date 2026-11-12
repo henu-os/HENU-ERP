@@ -1,9 +1,11 @@
 @echo off
-title JEEVIKA ERP 2.0 — Desktop Host Launcher
+title HENU ERP — Desktop Host Launcher
 color 0B
 
 echo =====================================================
-echo       JEEVIKA ERP 2.0 — DESKTOP HOST LAUNCHER
+echo          HENU ERP — DESKTOP HOST LAUNCHER
+echo   Created & Developed By HENU OS PRIVATE LIMITED
+echo               www.henuos.in
 echo =====================================================
 echo.
 

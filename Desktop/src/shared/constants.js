@@ -9,19 +9,23 @@ const DEFAULT_HOST = '127.0.0.1';
 const HEALTH_CHECK_PATH = '/swagger/v1/swagger.json';
 const FALLBACK_CHECK_PATH = '/login.html';
 const APP_ENTRY_PATH = '/login.html';
-const MAX_READINESS_RETRIES = 30;
+const MAX_READINESS_RETRIES = 60;
 const READINESS_RETRY_DELAY_MS = 500;
-const READINESS_TIMEOUT_MS = 15000;
+const READINESS_TIMEOUT_MS = 30000;
 
 const ALLOWED_HOSTNAMES = ['localhost', '127.0.0.1'];
 const ALLOWED_PORTS = ['5002', '3000'];
+
+const APP_NAME = 'HENU ERP';
+const COMPANY_NAME = 'HENU OS PRIVATE LIMITED';
+const SUPPORT_URL = 'http://www.henuos.in';
 
 const WINDOW_CONFIG = {
   width: 1280,
   height: 800,
   minWidth: 1024,
   minHeight: 700,
-  title: 'JEEVIKA ERP v2.0 - Desktop Host',
+  title: 'HENU ERP',
   backgroundColor: '#0F172A',
   autoHideMenuBar: false
 };
@@ -33,6 +37,9 @@ const IPC_CHANNELS = {
 };
 
 module.exports = {
+  APP_NAME,
+  COMPANY_NAME,
+  SUPPORT_URL,
   DEFAULT_PORT,
   DEFAULT_HOST,
   HEALTH_CHECK_PATH,

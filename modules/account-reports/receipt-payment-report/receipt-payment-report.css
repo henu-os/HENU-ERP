@@ -680,11 +680,9 @@ body.erp-module {
 }
 
 /* ── Statutory Signatory Section ─────────────────────────────────────────── */
-.rp-signatory-wrap {
-  margin-top: 28px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
-  page-break-inside: avoid;
+.rp-signatory-wrap,
+#rp-dynamic-footer-wrap {
+  display: none;
 }
 
 .rp-sign-society-label {
@@ -884,7 +882,9 @@ body.erp-module {
     font-size: 8.5pt !important;
   }
 
-  .rp-signatory-wrap {
+  .rp-signatory-wrap,
+  #rp-dynamic-footer-wrap {
+    display: block !important;
     margin-top: 24px !important;
     padding-top: 10px !important;
     page-break-inside: avoid !important;

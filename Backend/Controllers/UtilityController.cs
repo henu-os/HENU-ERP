@@ -1704,6 +1704,81 @@ namespace JeevikaERP.Controllers
                     }
                 }
 
+                // Statutory Housing Society Rule: Net Surplus/Deficit of Income & Expenditure
+                // must be transferred into Statutory / General Reserve / Accumulated Surplus in the new year.
+                decimal totalIncome = 0, totalExpense = 0;
+                using (var ieCmd = conn.CreateCommand())
+                {
+                    ieCmd.Transaction = tx;
+                    ieCmd.CommandText = $@"
+                        SELECT a.GrpMainId,
+                               SUM(COALESCE(d.Credit, 0) - COALESCE(d.Debit, 0)) AS NetIncome,
+                               SUM(COALESCE(d.Debit, 0) - COALESCE(d.Credit, 0)) AS NetExpense
+                        FROM {prefix}SocVoucherDetail d
+                        JOIN {prefix}SocVoucherHeader h ON d.VoucherId = h.VoucherId
+                        JOIN {prefix}SocAccount a ON d.AccountId = a.AccountId
+                        WHERE h.SocietyId = @sid AND h.FYId = @fyid AND h.IsDeleted = FALSE AND a.GrpMainId IN (3, 4)
+                        GROUP BY a.GrpMainId";
+                    AddParam(ieCmd, "@sid", req.SocietyId);
+                    AddParam(ieCmd, "@fyid", req.ClosingFYId);
+
+                    using var rIE = ieCmd.ExecuteReader();
+                    while (rIE.Read())
+                    {
+                        int mid = Convert.ToInt32(rIE["GrpMainId"]);
+                        if (mid == 3) totalIncome = Convert.ToDecimal(rIE["NetIncome"]);
+                        if (mid == 4) totalExpense = Convert.ToDecimal(rIE["NetExpense"]);
+                    }
+                }
+
+                decimal surplusDeficit = totalIncome - totalExpense;
+                if (surplusDeficit != 0)
+                {
+                    int targetReserveAccId = req.ReserveAccountId ?? 0;
+                    if (targetReserveAccId <= 0)
+                    {
+                        using var resCmd = conn.CreateCommand();
+                        resCmd.Transaction = tx;
+                        resCmd.CommandText = $@"
+                            SELECT AccountId FROM {prefix}SocAccount
+                            WHERE SocietyId = @sid AND IsDeleted = FALSE AND GrpMainId = 2
+                              AND (AccName ILIKE '%Surplus%' OR AccName ILIKE '%General Reserve%' OR AccName ILIKE '%Reserve Fund%' OR AccCode ILIKE '%RES%' OR AccCode ILIKE '%SURP%')
+                            ORDER BY AccountId ASC LIMIT 1";
+                        AddParam(resCmd, "@sid", req.SocietyId);
+                        var foundObj = resCmd.ExecuteScalar();
+                        if (foundObj != null && foundObj != DBNull.Value)
+                        {
+                            targetReserveAccId = Convert.ToInt32(foundObj);
+                        }
+                        else
+                        {
+                            using var anyCmd = conn.CreateCommand();
+                            anyCmd.Transaction = tx;
+                            anyCmd.CommandText = $@"SELECT AccountId FROM {prefix}SocAccount WHERE SocietyId = @sid AND IsDeleted = FALSE AND GrpMainId = 2 ORDER BY AccountId ASC LIMIT 1";
+                            AddParam(anyCmd, "@sid", req.SocietyId);
+                            var anyObj = anyCmd.ExecuteScalar();
+                            if (anyObj != null && anyObj != DBNull.Value) targetReserveAccId = Convert.ToInt32(anyObj);
+                        }
+                    }
+
+                    if (targetReserveAccId > 0)
+                    {
+                        int existingIdx = items.FindIndex(it => it.accId == targetReserveAccId);
+                        if (existingIdx >= 0)
+                        {
+                            var existing = items[existingIdx];
+                            decimal signedRes = (existing.drcr == "Cr" ? existing.bal : -existing.bal) + surplusDeficit;
+                            string newDrCr = signedRes >= 0 ? "Cr" : "Dr";
+                            items[existingIdx] = (targetReserveAccId, Math.Abs(signedRes), newDrCr);
+                        }
+                        else
+                        {
+                            string newDrCr = surplusDeficit >= 0 ? "Cr" : "Dr";
+                            items.Add((targetReserveAccId, Math.Abs(surplusDeficit), newDrCr));
+                        }
+                    }
+                }
+
                 foreach (var item in items)
                 {
                     using var upCmd = conn.CreateCommand();

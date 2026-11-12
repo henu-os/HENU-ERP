@@ -37,6 +37,17 @@ namespace JeevikaERP.Controllers
                     ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS AgreementValue NUMERIC(15, 2) DEFAULT 0;
                     ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS StampValue NUMERIC(15, 2) DEFAULT 0;
                     ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS RegistrationFees NUMERIC(15, 2) DEFAULT 0;
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingSlot4WPodium VARCHAR(100);
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS VehicleNo4WPodium VARCHAR(100);
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge4W NUMERIC(15, 2) DEFAULT 0;
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge4WPodium NUMERIC(15, 2) DEFAULT 0;
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingSlot2WPodium VARCHAR(100);
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS VehicleNo2WPodium VARCHAR(100);
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge2W NUMERIC(15, 2) DEFAULT 0;
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingCharge2WPodium NUMERIC(15, 2) DEFAULT 0;
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingBillCombined VARCHAR(50) DEFAULT 'Both';
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingTotal NUMERIC(15, 2) DEFAULT 0;
+                    ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS ParkingDetails TEXT;
                     ALTER TABLE jeevika_erp.SocMemberOpBalance ADD COLUMN IF NOT EXISTS BillTypeId INT;
 
                     -- Suffix existing soft-deleted members so their codes can be reused immediately
@@ -207,6 +218,9 @@ namespace JeevikaERP.Controllers
                          ContactNo, ContactNo2, Email, Email2, PANNo, TANNo, EntryDate, MemberType, Shares,
                          NonOccApplicable, NonOccReason, TenantName, TenantContact,
                          ParkingSlot2W, ParkingSlot4W, VehicleNo2W, VehicleNo4W,
+                          ParkingSlot4WPodium, VehicleNo4WPodium, ParkingCharge4W, ParkingCharge4WPodium,
+                          ParkingSlot2WPodium, VehicleNo2WPodium, ParkingCharge2W, ParkingCharge2WPodium,
+                          ParkingBillCombined, ParkingTotal, ParkingDetails,
                          LienBankName, LienLoanNo, LienAmount, LienStatus,
                          ShareCertNo, FolioNo, ShareFromNo, ShareToNo,
                          NomineeName, NomineeRelation, NomineeAddress, NomineeSharePct,
@@ -218,6 +232,9 @@ namespace JeevikaERP.Controllers
                          @contact, @contact2, @email, @email2, @pan, @tan, @entryDate, @memType, @shares,
                          @nonOccApp, @nonOccReason, @tenantName, @tenantContact,
                          @park2w, @park4w, @veh2w, @veh4w,
+                          @park4wPodium, @veh4wPodium, @park4wCharge, @park4wPodiumChg,
+                          @park2wPodium, @veh2wPodium, @park2wCharge, @park2wPodiumChg,
+                          @parkBillComb, @parkTotal, @parkDetails,
                          @lienBank, @lienLoan, @lienAmt, @lienStatus,
                          @shareCert, @folio, @shareFrom, @shareTo,
                          @nominee, @nomRelation, @nomAddr, @nomPct,
@@ -286,10 +303,21 @@ namespace JeevikaERP.Controllers
                         NonOccReason     = @nonOccReason,
                         TenantName       = @tenantName,
                         TenantContact    = @tenantContact,
-                        ParkingSlot2W    = @park2w,
-                        ParkingSlot4W    = @park4w,
-                        VehicleNo2W      = @veh2w,
-                        VehicleNo4W      = @veh4w,
+                        ParkingSlot2W         = @park2w,
+                        ParkingSlot4W         = @park4w,
+                        VehicleNo2W           = @veh2w,
+                        VehicleNo4W           = @veh4w,
+                        ParkingSlot4WPodium   = @park4wPodium,
+                        VehicleNo4WPodium     = @veh4wPodium,
+                        ParkingCharge4W       = @park4wCharge,
+                        ParkingCharge4WPodium = @park4wPodiumChg,
+                        ParkingSlot2WPodium   = @park2wPodium,
+                        VehicleNo2WPodium     = @veh2wPodium,
+                        ParkingCharge2W       = @park2wCharge,
+                        ParkingCharge2WPodium = @park2wPodiumChg,
+                        ParkingBillCombined   = @parkBillComb,
+                        ParkingTotal          = @parkTotal,
+                        ParkingDetails        = @parkDetails,
                         LienBankName     = @lienBank,
                         LienLoanNo       = @lienLoan,
                         LienAmount       = @lienAmt,
@@ -820,10 +848,21 @@ namespace JeevikaERP.Controllers
                 nonOccReason     = S("NonOccReason"),
                 tenantName       = S("TenantName"),
                 tenantContact    = S("TenantContact"),
-                parkingSlot2W    = S("ParkingSlot2W"),
-                parkingSlot4W    = S("ParkingSlot4W"),
-                vehicleNo2W      = S("VehicleNo2W"),
-                vehicleNo4W      = S("VehicleNo4W"),
+                parkingSlot2W         = S("ParkingSlot2W"),
+                parkingSlot4W         = S("ParkingSlot4W"),
+                vehicleNo2W           = S("VehicleNo2W"),
+                vehicleNo4W           = S("VehicleNo4W"),
+                parkingSlot4WPodium   = S("ParkingSlot4WPodium"),
+                vehicleNo4WPodium     = S("VehicleNo4WPodium"),
+                parkingCharge4W       = Get<decimal>("ParkingCharge4W"),
+                parkingCharge4WPodium = Get<decimal>("ParkingCharge4WPodium"),
+                parkingSlot2WPodium   = S("ParkingSlot2WPodium"),
+                vehicleNo2WPodium     = S("VehicleNo2WPodium"),
+                parkingCharge2W       = Get<decimal>("ParkingCharge2W"),
+                parkingCharge2WPodium = Get<decimal>("ParkingCharge2WPodium"),
+                parkingBillCombined   = string.IsNullOrWhiteSpace(S("ParkingBillCombined")) ? "Both" : S("ParkingBillCombined"),
+                parkingTotal          = Get<decimal>("ParkingTotal"),
+                parkingDetails        = S("ParkingDetails"),
                 lienBankName     = S("LienBankName"),
                 lienLoanNo       = S("LienLoanNo"),
                 lienAmount       = Get<decimal>("LienAmount"),
@@ -898,6 +937,17 @@ namespace JeevikaERP.Controllers
             cmd.Parameters.AddWithValue("@park4w",        (object?)m.ParkingSlot4W   ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@veh2w",         (object?)m.VehicleNo2W     ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@veh4w",         (object?)m.VehicleNo4W     ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@park4wPodium",  (object?)m.ParkingSlot4WPodium ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@veh4wPodium",   (object?)m.VehicleNo4WPodium   ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@park4wCharge",  m.ParkingCharge4W);
+            cmd.Parameters.AddWithValue("@park4wPodiumChg", m.ParkingCharge4WPodium);
+            cmd.Parameters.AddWithValue("@park2wPodium",  (object?)m.ParkingSlot2WPodium ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@veh2wPodium",   (object?)m.VehicleNo2WPodium   ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@park2wCharge",  m.ParkingCharge2W);
+            cmd.Parameters.AddWithValue("@park2wPodiumChg", m.ParkingCharge2WPodium);
+            cmd.Parameters.AddWithValue("@parkBillComb",  string.IsNullOrWhiteSpace(m.ParkingBillCombined) ? "Both" : m.ParkingBillCombined);
+            cmd.Parameters.AddWithValue("@parkTotal",     m.ParkingTotal);
+            cmd.Parameters.AddWithValue("@parkDetails",   (object?)m.ParkingDetails ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@lienBank",      (object?)m.LienBankName    ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@lienLoan",      (object?)m.LienLoanNo      ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@lienAmt",       m.LienAmount);
@@ -1820,6 +1870,17 @@ namespace JeevikaERP.Controllers
         public string?   ParkingSlot4W    { get; set; }
         public string?   VehicleNo2W      { get; set; }
         public string?   VehicleNo4W      { get; set; }
+        public string?   ParkingSlot4WPodium      { get; set; }
+        public string?   VehicleNo4WPodium        { get; set; }
+        public decimal   ParkingCharge4W          { get; set; } = 0;
+        public decimal   ParkingCharge4WPodium    { get; set; } = 0;
+        public string?   ParkingSlot2WPodium      { get; set; }
+        public string?   VehicleNo2WPodium        { get; set; }
+        public decimal   ParkingCharge2W          { get; set; } = 0;
+        public decimal   ParkingCharge2WPodium    { get; set; } = 0;
+        public string?   ParkingBillCombined      { get; set; } = "Both";
+        public decimal   ParkingTotal             { get; set; } = 0;
+        public string?   ParkingDetails           { get; set; }
         public string?   LienBankName     { get; set; }
         public string?   LienLoanNo       { get; set; }
         public decimal   LienAmount       { get; set; } = 0;

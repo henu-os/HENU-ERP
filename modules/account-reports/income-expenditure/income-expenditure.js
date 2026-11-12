@@ -192,15 +192,37 @@
       }
     }
 
-    // Print Signatory Society Name
-    const signSocEl = document.getElementById('ieSignSocName');
-    if (signSocEl) {
-      signSocEl.textContent = `For ${activeSocName}`;
+    // Print Signatory Society Name / Dynamic Footers
+    const footCell = document.getElementById('ie-dynamic-footer-cell');
+    if (footCell && window.ReportFooterHelper) {
+      footCell.innerHTML = window.ReportFooterHelper.renderHtml('income-expenditure', activeSocName, curToStr);
+    } else {
+      const signSocEl = document.getElementById('ieSignSocName');
+      if (signSocEl) {
+        signSocEl.textContent = `For ${activeSocName}`;
+      }
     }
   }
 
+  window.toggleIEFooterSwap = function () {
+    if (window.ReportFooterHelper) {
+      const swapped = window.ReportFooterHelper.toggle('income-expenditure');
+      const chk = document.getElementById('chk-swap-footer');
+      if (chk) chk.checked = swapped;
+    }
+    const footCell = document.getElementById('ie-dynamic-footer-cell');
+    if (footCell && window.ReportFooterHelper) {
+      footCell.innerHTML = window.ReportFooterHelper.renderHtml('income-expenditure', activeSocName, curToStr);
+    }
+  };
+
   // ── 4. T-FORMAT SIDE-BY-SIDE RENDERER ────────────────────────────────────
   window.renderIEView = function () {
+    const chkSwap = document.getElementById('chk-swap-footer');
+    if (chkSwap && window.ReportFooterHelper) {
+      chkSwap.checked = window.ReportFooterHelper.isSwapped('income-expenditure');
+    }
+
     if (!currentIEReport) return;
 
     const viewMode = document.getElementById('ie-view-mode')?.value || 'detailed';
@@ -954,20 +976,17 @@
       border: getBorders(7, thinBorder, doubleBorder)
     }, '#,##0.00', incTotFormula);
 
-    // Signatory Section
-    const rSign = rTotal + 2;
-    setCell(rSign, 0, `For ${socName}`, 's', {
-      font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    });
-    merges.push({ s: { r: rSign, c: 0 }, e: { r: rSign, c: 2 } });
-
-    const rBoxes = rSign + 4;
-    setCell(rBoxes, 0, 'Chairman                        Secretary                        Treasurer', 's', {
-      font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '000000' } },
-      alignment: { horizontal: 'left', vertical: 'center' }
-    });
-    merges.push({ s: { r: rBoxes, c: 0 }, e: { r: rBoxes, c: 3 } });
+    // Dynamic Footers from Configuration & Notes Master
+    let rBoxes = rTotal + 2;
+    if (window.ReportFooterHelper) {
+      rBoxes = window.ReportFooterHelper.appendToXlsx(ws, rBoxes, 'income-expenditure', socName, curToStr, setCell, merges, 7);
+    } else {
+      setCell(rBoxes, 0, `For ${socName}`, 's', {
+        font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+        alignment: { horizontal: 'left', vertical: 'center' }
+      });
+      merges.push({ s: { r: rBoxes, c: 0 }, e: { r: rBoxes, c: 2 } });
+    }
 
     // Set Range
     ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rBoxes + 1, c: 7 } });

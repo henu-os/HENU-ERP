@@ -270,6 +270,46 @@ namespace JeevikaERP.Services
                 }
             }
 
+            var printSetup = new Dictionary<string, object>
+            {
+                ["format"] = "GST_DETAILED",
+                ["heading"] = "TAX INVOICE",
+                ["bldg"] = true,
+                ["srno"] = true,
+                ["newpage"] = false,
+                ["arrears"] = true,
+                ["receipt"] = false,
+                ["blankhead"] = false,
+                ["qr"] = "upi",
+                ["sign"] = "sig"
+            };
+
+            try
+            {
+                using var pCmd = conn.CreateCommand();
+                pCmd.CommandText = @"
+                    SELECT FormatKey, Heading, PrintBldg, ShowSrNo, NewPage, 
+                           ShowArrears, ShowReceipt, BlankHead, QrCode, SignType
+                    FROM jeevika_erp.socbillprintsetup
+                    WHERE SocietyId = @sid";
+                pCmd.Parameters.AddWithValue("@sid", societyId);
+                using var pr = pCmd.ExecuteReader();
+                if (pr.Read())
+                {
+                    printSetup["format"] = pr["FormatKey"]?.ToString() ?? "GST_DETAILED";
+                    printSetup["heading"] = pr["Heading"]?.ToString() ?? "TAX INVOICE";
+                    printSetup["bldg"] = Convert.ToBoolean(pr["PrintBldg"]);
+                    printSetup["srno"] = Convert.ToBoolean(pr["ShowSrNo"]);
+                    printSetup["newpage"] = Convert.ToBoolean(pr["NewPage"]);
+                    printSetup["arrears"] = Convert.ToBoolean(pr["ShowArrears"]);
+                    printSetup["receipt"] = Convert.ToBoolean(pr["ShowReceipt"]);
+                    printSetup["blankhead"] = Convert.ToBoolean(pr["BlankHead"]);
+                    printSetup["qr"] = pr["QrCode"]?.ToString() ?? "upi";
+                    printSetup["sign"] = pr["SignType"]?.ToString() ?? "sig";
+                }
+            }
+            catch { }
+
             return new
             {
                 success = true,
@@ -280,6 +320,7 @@ namespace JeevikaERP.Services
                 sacCode = sacCode,
                 dateRange = new { from = bFrom.ToString("yyyy-MM-dd"), to = bTo.ToString("yyyy-MM-dd") },
                 totalBills = bills.Count,
+                printSetup = printSetup,
                 bills = bills
             };
         }
@@ -313,7 +354,7 @@ namespace JeevikaERP.Services
                 FROM jeevika_erp.SocVoucherHeader v
                 LEFT JOIN jeevika_erp.SocMember m ON (UPPER(TRIM(v.PersonCode)) = UPPER(TRIM(m.MemCode)) OR UPPER(TRIM(v.RefNo)) = UPPER(TRIM(m.MemCode)) OR v.PersonName ILIKE '%' || m.MemName || '%') AND (m.SocietyId = v.SocietyId)
                 WHERE (v.SocietyId = @sid OR @sid <= 0)
-                  AND v.VoucherType IN ('Receipt', 'MemberReceipt')
+                  AND v.VoucherType IN ('Receipt', 'MemberReceipt', 'MRV', 'RV')
                   AND v.IsDeleted = FALSE
                   AND v.VoucherDate >= @rFrom AND v.VoucherDate <= @rTo";
 
@@ -351,6 +392,7 @@ namespace JeevikaERP.Services
                 while (r.Read())
                 {
                     decimal amt = Convert.ToDecimal(r["Amount"]);
+                    string chqNo = r["ChqNo"]?.ToString() ?? "";
                     receipts.Add(new Dictionary<string, object>
                     {
                         ["voucherId"] = Convert.ToInt32(r["VoucherId"]),
@@ -359,14 +401,15 @@ namespace JeevikaERP.Services
                         ["billingPeriod"] = fyLabel,
                         ["amount"] = amt,
                         ["amountInWords"] = NumberToWordsINR(amt),
-                        ["paymentMode"] = !string.IsNullOrWhiteSpace(r["ChqNo"]?.ToString()) ? "Cheque / Digital" : "Cash",
+                        ["paymentMode"] = !string.IsNullOrWhiteSpace(chqNo) ? "Cheque / Digital" : "Cash",
                         ["bankName"] = r["BankName"]?.ToString() ?? r["CashBankName"]?.ToString() ?? "",
                         ["branch"] = societyMeta.GetValueOrDefault("BankBranch", "")?.ToString() ?? "",
-                        ["chequeNo"] = r["ChqNo"]?.ToString() ?? "",
+                        ["chequeNo"] = chqNo,
                         ["chequeDate"] = r["ChqDate"] != DBNull.Value ? Convert.ToDateTime(r["ChqDate"]).ToString("yyyy-MM-dd") : "",
                         ["narration"] = r["Narration"]?.ToString() ?? "",
                         ["collectedBy"] = r["CreatedBy"]?.ToString() ?? "ADMIN",
                         ["allocation"] = "Towards Maintenance Dues",
+                        ["statutoryNote"] = !string.IsNullOrWhiteSpace(chqNo) ? "Subject to realization of cheque / clearing." : "Received with thanks.",
                         ["member"] = new Dictionary<string, object>
                         {
                             ["memberId"] = r["MemberId"] != DBNull.Value ? Convert.ToInt32(r["MemberId"]) : 0,
@@ -678,7 +721,7 @@ namespace JeevikaERP.Services
                     SELECT TO_CHAR(VoucherDate, 'YYYY-MM') AS MKey, COALESCE(SUM(Amount), 0) AS TotalReceipts
                     FROM jeevika_erp.SocVoucherHeader
                     WHERE (SocietyId = @sid OR @sid <= 0) AND IsDeleted = FALSE
-                      AND VoucherType IN ('Receipt', 'MemberReceipt')
+                      AND VoucherType IN ('Receipt', 'MemberReceipt', 'MRV', 'RV')
                       AND VoucherDate >= @sDate AND VoucherDate <= @eDate
                     GROUP BY TO_CHAR(VoucherDate, 'YYYY-MM')";
                 rCmd.Parameters.AddWithValue("@sid", societyId);
@@ -924,7 +967,7 @@ namespace JeevikaERP.Services
                 FROM jeevika_erp.SocVoucherHeader v
                 LEFT JOIN jeevika_erp.SocMember m ON (UPPER(TRIM(v.PersonCode)) = UPPER(TRIM(m.MemCode)) OR UPPER(TRIM(v.RefNo)) = UPPER(TRIM(m.MemCode)) OR v.PersonName ILIKE '%' || m.MemName || '%') AND (m.SocietyId = v.SocietyId)
                 WHERE (v.SocietyId = @sid OR @sid <= 0)
-                  AND v.VoucherType IN ('Receipt', 'MemberReceipt')
+                  AND v.VoucherType IN ('Receipt', 'MemberReceipt', 'MRV', 'RV')
                   AND v.IsDeleted = FALSE
                   AND v.VoucherDate >= @dFrom AND v.VoucherDate <= @dTo";
 
@@ -1274,7 +1317,7 @@ namespace JeevikaERP.Services
                 FROM jeevika_erp.SocVoucherHeader v
                 LEFT JOIN jeevika_erp.SocMember m ON (UPPER(TRIM(v.PersonCode)) = UPPER(TRIM(m.MemCode)) OR UPPER(TRIM(v.RefNo)) = UPPER(TRIM(m.MemCode)) OR v.PersonName ILIKE '%' || m.MemName || '%') AND (m.SocietyId = v.SocietyId)
                 WHERE (v.SocietyId = @sid OR @sid <= 0)
-                  AND v.VoucherType IN ('Receipt', 'MemberReceipt')
+                  AND v.VoucherType IN ('Receipt', 'MemberReceipt', 'MRV', 'RV')
                   AND v.IsDeleted = FALSE
                   AND v.VoucherDate >= @rFrom AND v.VoucherDate <= @rTo";
 
@@ -1717,6 +1760,113 @@ namespace JeevikaERP.Services
                 totalAmount = totalAmount,
                 items = jvs,
                 totalCount = jvs.Count
+            };
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 16. BILL_TYPE_TRF_REGISTER (Bill Type Transfer Register)
+        // ═══════════════════════════════════════════════════════════
+        public static object GetBillTypeTransferRegister(
+            NpgsqlConnection conn,
+            int societyId,
+            int fyId,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? wing,
+            string? fromMember,
+            string? toMember)
+        {
+            var societyMeta = GetSocietyMeta(conn, societyId);
+            var (fyStart, fyEnd, fyLabel) = GetFiscalYearBounds(conn, societyId, fyId);
+            DateTime aFrom = fromDate ?? fyStart;
+            DateTime aTo = toDate ?? fyEnd;
+
+            using var cmd = conn.CreateCommand();
+            var sql = @"
+                SELECT v.VoucherId, v.VoucherNo, v.VoucherDate, v.Amount, v.PersonName, v.PersonCode,
+                       v.RefNo, v.Narration, v.Particular1, v.Particular2, v.Status,
+                       m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo
+                FROM jeevika_erp.SocVoucherHeader v
+                LEFT JOIN jeevika_erp.SocMember m ON (UPPER(TRIM(v.PersonCode)) = UPPER(TRIM(m.MemCode)) OR UPPER(TRIM(v.RefNo)) = UPPER(TRIM(m.MemCode)) OR v.PersonName ILIKE '%' || m.MemName || '%') AND (m.SocietyId = v.SocietyId)
+                WHERE (v.SocietyId = @sid OR @sid <= 0)
+                  AND v.VoucherType = 'BillTypeTransfer'
+                  AND v.IsDeleted = FALSE
+                  AND v.VoucherDate >= @aFrom AND v.VoucherDate <= @aTo";
+
+            cmd.Parameters.AddWithValue("@sid", societyId);
+            cmd.Parameters.AddWithValue("@aFrom", aFrom);
+            cmd.Parameters.AddWithValue("@aTo", aTo);
+
+            if (!string.IsNullOrWhiteSpace(wing) && wing != "all")
+            {
+                sql += " AND m.Wing = @wing";
+                cmd.Parameters.AddWithValue("@wing", wing.Trim());
+            }
+
+            if (!string.IsNullOrWhiteSpace(fromMember))
+            {
+                sql += " AND (m.MemCode = @mCode OR v.PersonCode = @mCode)";
+                cmd.Parameters.AddWithValue("@mCode", fromMember.Trim());
+            }
+
+            sql += " ORDER BY v.VoucherDate ASC, v.VoucherNo ASC";
+            cmd.CommandText = sql;
+
+            var items = new List<Dictionary<string, object>>();
+            decimal totalAmount = 0m;
+            int srNo = 1;
+
+            using (var r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    decimal amt = Convert.ToDecimal(r["Amount"]);
+                    totalAmount += amt;
+
+                    var refStr = r["RefNo"]?.ToString() ?? "";
+                    var parts = refStr.Split('|');
+                    var fromBt = parts.Length > 0 && !string.IsNullOrWhiteSpace(parts[0]) ? parts[0] : (r["Particular1"]?.ToString() ?? "Major Repair");
+                    var fromType = parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]) ? parts[1] : "Dr";
+                    var toBt = parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]) ? parts[2] : (r["Particular2"]?.ToString() ?? "Maintenance");
+                    var toType = parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) ? parts[3] : "Cr";
+                    var flatVal = parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]) ? parts[4] : (r["FlatNo"] != DBNull.Value ? $"{r["Wing"]}-{r["FlatNo"]}" : "");
+
+                    items.Add(new Dictionary<string, object>
+                    {
+                        ["srNo"] = srNo++,
+                        ["voucherId"] = Convert.ToInt32(r["VoucherId"]),
+                        ["transferNumber"] = r["VoucherNo"]?.ToString() ?? "",
+                        ["voucherNo"] = r["VoucherNo"]?.ToString() ?? "",
+                        ["date"] = Convert.ToDateTime(r["VoucherDate"]).ToString("yyyy-MM-dd"),
+                        ["voucherDate"] = Convert.ToDateTime(r["VoucherDate"]).ToString("yyyy-MM-dd"),
+                        ["unit"] = !string.IsNullOrEmpty(flatVal) ? flatVal : $"{r["Wing"]}-{r["FlatNo"]}",
+                        ["wing"] = r["Wing"]?.ToString() ?? "",
+                        ["flatNo"] = r["FlatNo"]?.ToString() ?? flatVal,
+                        ["member"] = r["MemName"]?.ToString() ?? r["PersonName"]?.ToString() ?? "",
+                        ["memberName"] = r["MemName"]?.ToString() ?? r["PersonName"]?.ToString() ?? "",
+                        ["memberCode"] = r["MemCode"]?.ToString() ?? r["PersonCode"]?.ToString() ?? "",
+                        ["fromBillType"] = $"{fromBt} ({fromType})",
+                        ["toBillType"] = $"{toBt} ({toType})",
+                        ["sourceHead"] = fromBt,
+                        ["destHead"] = toBt,
+                        ["amount"] = amt,
+                        ["narration"] = r["Narration"]?.ToString() ?? "",
+                        ["status"] = r["Status"]?.ToString() ?? "Posted"
+                    });
+                }
+            }
+
+            return new Dictionary<string, object>
+            {
+                ["success"] = true,
+                ["reportKey"] = "BILL_TYPE_TRF_REGISTER",
+                ["society"] = societyMeta,
+                ["fiscalYear"] = fyLabel,
+                ["dateRange"] = new { from = aFrom.ToString("yyyy-MM-dd"), to = aTo.ToString("yyyy-MM-dd") },
+                ["totalAmount"] = totalAmount,
+                ["totalCount"] = items.Count,
+                ["transfers"] = items,
+                ["items"] = items
             };
         }
 

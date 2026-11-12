@@ -60,7 +60,7 @@
 
   function getActiveSocietyId() {
     var sid = (window.Auth && window.Auth.getSocietyId) ? window.Auth.getSocietyId() : null;
-    return sid || sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || '4';
+    return sid || sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || '';
   }
 
   function getFyId() {
@@ -913,7 +913,7 @@
     document.getElementById('led-mobile1').textContent = mob;
 
     var curBillType = (document.getElementById('frm-billtype') ? document.getElementById('frm-billtype').value : '') || (activeBillType === 'ALL' ? 'Maintenance' : activeBillType);
-    var sid = getActiveSocietyId() || 4;
+    var sid = getActiveSocietyId();
     var fyid = getFyId() || 0;
 
     var totPrin = 0, totInt = 0, netDue = 0;
@@ -2038,8 +2038,8 @@
     return [
       { group: 'VOUCHER DETAILS', subGroup: 'VOUCHER DETAILS', label: 'Receipt Date (DD-MM-YYYY) [Optional]', key: 'receiptDate', width: 24, align: 'center' },
       { group: 'VOUCHER DETAILS', subGroup: 'VOUCHER DETAILS', label: 'Bill Type *', key: 'billType', width: 18, align: 'center' },
-      { group: 'MEMBER DETAILS', subGroup: 'MEMBER DETAILS', label: 'Member Code', key: 'memberCode', width: 15, align: 'center' },
-      { group: 'MEMBER DETAILS', subGroup: 'MEMBER DETAILS', label: 'Member Name *', key: 'memberName', width: 32, align: 'left' },
+      { group: 'MEMBER DETAILS', subGroup: 'MEMBER DETAILS', label: 'Member Code *', key: 'memberCode', width: 16, align: 'center' },
+      { group: 'MEMBER DETAILS', subGroup: 'MEMBER DETAILS', label: 'Member Name', key: 'memberName', width: 32, align: 'left' },
       { group: 'MEMBER DETAILS', subGroup: 'MEMBER DETAILS', label: 'Flat No', key: 'wingFlat', width: 14, align: 'center' },
       { group: 'BANKING & PAYMENT', subGroup: 'ACCOUNTING', label: 'Debit Account Type *', key: 'debitAccountType', width: 18, align: 'center' },
       { group: 'BANKING & PAYMENT', subGroup: 'ACCOUNTING', label: 'Deposit To Account *', key: 'depositToAccount', width: 30, align: 'left' },
@@ -2059,15 +2059,25 @@
 
   async function fetchReceiptTemplateMeta() {
     var sid = getActiveSocietyId();
+    if (!sid) {
+      toast('Active society not identified. Please select a society first.', false);
+      return null;
+    }
     var meta = await fetchApiData('/api/member-receipts/template-meta?societyId=' + sid);
-    if (meta && meta.success && meta.members) {
+    if (meta && meta.success && meta.members && meta.members.length > 0) {
       meta.members = meta.members.map(function (m) {
+        var wingStr = (m.wing || '').trim();
+        var rawFlat = (m.flatNo || m.flat || '').trim();
+        var fDisplay = rawFlat;
+        if (wingStr && !rawFlat.toUpperCase().startsWith(wingStr.toUpperCase())) {
+          fDisplay = wingStr + '-' + rawFlat;
+        }
         return {
           memberId: m.memberId || m.socMemId,
-          memCode: m.memCode || '',
-          memName: m.memName || '',
-          flatNo: m.flatNo || '',
-          label: m.label || ('[' + (m.memCode || '') + '] ' + (m.memName || '')),
+          memCode: (m.memCode || '').trim() || (fDisplay || String(m.memberId || m.socMemId)),
+          memName: (m.memName || '').trim(),
+          flatNo: fDisplay,
+          label: m.label || ('[' + (m.memCode || '') + '] ' + (m.memName || '') + (fDisplay ? ' (' + fDisplay + ')' : '')),
           netDue: parseFloat(m.netDue) || 0,
           principalDue: parseFloat(m.principalDue) || 0,
           interestDue: parseFloat(m.interestDue) || 0
@@ -2076,25 +2086,35 @@
       return meta;
     }
 
+    if (!members || members.length === 0) {
+      await loadMembers();
+    }
+
+    var fallbackMembers = (members || []).map(function (m) {
+      var wingStr = (m.wing || m.Wing || '').trim();
+      var rawFlat = (m.flatNo || m.FlatNo || m.flat || '').trim();
+      var flatStr = wingStr ? (wingStr + '-' + rawFlat) : rawFlat;
+      var code = (m.memCode || m.memberCode || '').trim() || (flatStr || String(m.memberId || m.socMemId || m.id));
+      var name = (m.memName || m.memberName || m.name || '').trim();
+      return {
+        memberId: m.memberId || m.socMemId || m.id,
+        memCode: code,
+        memName: name,
+        flatNo: flatStr,
+        label: '[' + code + '] ' + name + (flatStr ? ' (' + flatStr + ')' : ''),
+        netDue: 0,
+        principalDue: 0,
+        interestDue: 0
+      };
+    });
+
     return {
       success: true,
-      billTypes: billTypes.map(function (bt) { return { billTypeId: bt.billTypeId || bt.id, billTypeName: bt.billTypeName || bt.name }; }),
-      members: members.map(function (m) {
-        var flatStr = m.wing ? (m.wing + '-' + (m.flatNo || m.flat)) : (m.flatNo || m.flat || '');
-        return {
-          memberId: m.memberId || m.socMemId,
-          memCode: m.memCode || '',
-          memName: m.memName || '',
-          flatNo: flatStr,
-          label: '[' + (m.memCode || '') + '] ' + (m.memName || '') + (flatStr ? ' (' + flatStr + ')' : ''),
-          netDue: 0,
-          principalDue: 0,
-          interestDue: 0
-        };
-      }),
-      cashAccounts: accounts.filter(function (a) { return (a.accCode === 'ASS-1001' || (a.accName || '').toLowerCase().includes('cash')); }),
-      bankAccounts: accounts.filter(function (a) { return !(a.accCode === 'ASS-1001' || (a.accName || '').toLowerCase().includes('cash')); }),
-      allDepositAccounts: accounts,
+      billTypes: (billTypes && billTypes.length > 0) ? billTypes.map(function (bt) { return { billTypeId: bt.billTypeId || bt.id, billTypeName: bt.billTypeName || bt.name }; }) : [{ billTypeId: 1, billTypeName: 'Maintenance' }, { billTypeId: 2, billTypeName: 'Major Repair' }],
+      members: fallbackMembers,
+      cashAccounts: (accounts || []).filter(function (a) { return (a.accCode === 'ASS-1001' || (a.accName || '').toLowerCase().includes('cash')); }),
+      bankAccounts: (accounts || []).filter(function (a) { return !(a.accCode === 'ASS-1001' || (a.accName || '').toLowerCase().includes('cash')); }),
+      allDepositAccounts: accounts || [],
       transactionTypes: ['Cheque', 'NEFT', 'UPI', 'IMPS', 'IB [Internal Bank Transfer]', 'RTGS', 'Cash'],
       allocationModes: ['AUTO', 'MANUAL']
     };
@@ -2104,6 +2124,13 @@
   window.downloadReceiptTemplate = async function (withMembers) {
     closeAllToolbarDropdowns();
     var meta = await fetchReceiptTemplateMeta();
+    if (!meta) return;
+
+    if (!meta.members || meta.members.length === 0) {
+      toast('No members found for this society. Please add members first.', false);
+      return;
+    }
+
     var schema = getReceiptImportTemplateSchema();
 
     if (typeof XLSX === 'undefined' || !XLSX.utils) {
@@ -2127,15 +2154,37 @@
     var defaultBType = (activeBillType && activeBillType !== 'ALL') ? activeBillType : (meta.billTypes[0] ? meta.billTypes[0].billTypeName : 'Maintenance');
     var defaultBankAcc = (meta.bankAccounts && meta.bankAccounts[0]) ? meta.bankAccounts[0].label : (meta.allDepositAccounts[0] ? meta.allDepositAccounts[0].label : '[ASS-1001] Cash in Hand');
     var memberRowsCount = (meta.members || []).length;
-    var listMax = Math.max(memberRowsCount + 1, 2);
+    var listMax = memberRowsCount + 1;
+
+    function buildMemberMatchExpr(r) {
+      var colRef = 'C' + r;
+      return 'IFERROR(MATCH(TRIM(' + colRef + '&""), Lists!$B$2:$B$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(' + colRef + ', Lists!$B$2:$B$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(IFERROR(VALUE(' + colRef + '), ' + colRef + '), Lists!$B$2:$B$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(TRIM(' + colRef + '&""), Lists!$M$2:$M$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(TRIM(' + colRef + '&""), Lists!$N$2:$N$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(TRIM(' + colRef + '&""), Lists!$D$2:$D$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(' + colRef + ', Lists!$D$2:$D$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(TRIM(' + colRef + '&""), Lists!$O$2:$O$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(TRIM(' + colRef + '&""), Lists!$P$2:$P$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(SUBSTITUTE(TRIM(' + colRef + '&""), "/", "-"), Lists!$B$2:$B$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(SUBSTITUTE(TRIM(' + colRef + '&""), "-", "/"), Lists!$B$2:$B$' + listMax + ', 0), ' +
+             'IFERROR(MATCH(SUBSTITUTE(TRIM(' + colRef + '&""), "/", "-"), Lists!$D$2:$D$' + listMax + ', 0), ' +
+             'MATCH(SUBSTITUTE(TRIM(' + colRef + '&""), "-", "/"), Lists!$D$2:$D$' + listMax + ', 0)))))))))))))';
+    }
+
+    function buildMemberMatchFull(r) {
+      return 'IFERROR(' + buildMemberMatchExpr(r) + ', MATCH(TRIM(D' + r + '&""), Lists!$C$2:$C$' + listMax + ', 0))';
+    }
 
     if (withMembers && meta.members && meta.members.length > 0) {
       meta.members.forEach(function (m) {
         var excelRowNum = wsData.length + 1;
-        var fMemName = 'IFERROR(INDEX(Lists!$C$2:$C$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), "' + (m.memName || '') + '")';
-        var fFlat = 'IFERROR(INDEX(Lists!$D$2:$D$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), IFERROR(INDEX(Lists!$D$2:$D$' + listMax + ', MATCH(D' + excelRowNum + ', Lists!$C$2:$C$' + listMax + ', 0)), "' + (m.flatNo || '') + '"))';
-        var fAmt = 'IFERROR(INDEX(Lists!$J$2:$J$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), IFERROR(INDEX(Lists!$J$2:$J$' + listMax + ', MATCH(D' + excelRowNum + ', Lists!$C$2:$C$' + listMax + ', 0)), ' + (m.netDue || 0) + '))';
-        var fIntLookup = 'IFERROR(INDEX(Lists!$L$2:$L$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), IFERROR(INDEX(Lists!$L$2:$L$' + listMax + ', MATCH(D' + excelRowNum + ', Lists!$C$2:$C$' + listMax + ', 0)), 0))';
+        var matchC = buildMemberMatchExpr(excelRowNum);
+        var fMemName = 'IF(C' + excelRowNum + '="", "", IFERROR(INDEX(Lists!$C$2:$C$' + listMax + ', ' + matchC + '), "' + (m.memName || '').replace(/"/g, '""') + '"))';
+        var fFlat = 'IF(C' + excelRowNum + '="", "", IFERROR(INDEX(Lists!$D$2:$D$' + listMax + ', ' + matchC + '), "' + (m.flatNo || '').replace(/"/g, '""') + '"))';
+        var fAmt = 'IF(C' + excelRowNum + '="", 0, IFERROR(INDEX(Lists!$J$2:$J$' + listMax + ', ' + matchC + '), ' + (m.netDue || 0) + '))';
+        var fIntLookup = 'IF(C' + excelRowNum + '="", 0, IFERROR(INDEX(Lists!$L$2:$L$' + listMax + ', ' + matchC + '), 0))';
         var fInt = 'IFERROR(IF(L' + excelRowNum + '>0, MIN(L' + excelRowNum + ', MAX(0, ' + fIntLookup + ')), 0), 0)';
         var fPrin = 'IFERROR(IF(L' + excelRowNum + '>0, MAX(0, L' + excelRowNum + ' - O' + excelRowNum + '), 0), 0)';
 
@@ -2166,13 +2215,14 @@
         ]);
       });
     } else {
-      // Blank Template: Provide 20 blank entry rows with formulas and defaults
-      for (var b = 0; b < 20; b++) {
+      // Blank Template: Provide 100 blank entry rows with dynamic formulas and defaults
+      for (var b = 0; b < 100; b++) {
         var excelRowNum = wsData.length + 1;
-        var fMemName = 'IFERROR(INDEX(Lists!$C$2:$C$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), "")';
-        var fFlat = 'IFERROR(INDEX(Lists!$D$2:$D$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), IFERROR(INDEX(Lists!$D$2:$D$' + listMax + ', MATCH(D' + excelRowNum + ', Lists!$C$2:$C$' + listMax + ', 0)), ""))';
-        var fAmt = 'IFERROR(INDEX(Lists!$J$2:$J$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), IFERROR(INDEX(Lists!$J$2:$J$' + listMax + ', MATCH(D' + excelRowNum + ', Lists!$C$2:$C$' + listMax + ', 0)), 0))';
-        var fIntLookup = 'IFERROR(INDEX(Lists!$L$2:$L$' + listMax + ', MATCH(C' + excelRowNum + ', Lists!$B$2:$B$' + listMax + ', 0)), IFERROR(INDEX(Lists!$L$2:$L$' + listMax + ', MATCH(D' + excelRowNum + ', Lists!$C$2:$C$' + listMax + ', 0)), 0))';
+        var matchC = buildMemberMatchExpr(excelRowNum);
+        var fMemName = 'IF(C' + excelRowNum + '="", "", IFERROR(INDEX(Lists!$C$2:$C$' + listMax + ', ' + matchC + '), ""))';
+        var fFlat = 'IF(C' + excelRowNum + '="", "", IFERROR(INDEX(Lists!$D$2:$D$' + listMax + ', ' + matchC + '), ""))';
+        var fAmt = 'IF(C' + excelRowNum + '="", 0, IFERROR(INDEX(Lists!$J$2:$J$' + listMax + ', ' + matchC + '), 0))';
+        var fIntLookup = 'IF(C' + excelRowNum + '="", 0, IFERROR(INDEX(Lists!$L$2:$L$' + listMax + ', ' + matchC + '), 0))';
         var fInt = 'IFERROR(IF(L' + excelRowNum + '>0, MIN(L' + excelRowNum + ', MAX(0, ' + fIntLookup + ')), 0), 0)';
         var fPrin = 'IFERROR(IF(L' + excelRowNum + '>0, MAX(0, L' + excelRowNum + ' - O' + excelRowNum + '), 0), 0)';
 
@@ -2278,6 +2328,7 @@
           border: borderAll
         };
         if (isNum) ws[cellRef].z = '#,##0.00';
+        if (cIdx === 2) ws[cellRef].z = '@';
       });
     }
 
@@ -2294,14 +2345,26 @@
     var listAlloc     = meta.allocationModes || ['AUTO', 'MANUAL'];
 
     var maxLen = Math.max(listBillTypes.length, memberRowsCount, listDebit.length, listAccounts.length, listTxnTypes.length, listAlloc.length, 1);
-    var wsListsData = [['BILL TYPES', 'MEMBER CODE', 'MEMBER NAME', 'FLAT NO', 'MEMBER ID', 'DEBIT TYPES', 'DEPOSIT ACCOUNTS', 'PAYMENT MODES', 'ALLOCATION MODES', 'NET DUE', 'PRINCIPAL DUE', 'INTEREST DUE']];
+    var wsListsData = [[
+      'BILL TYPES', 'MEMBER CODE', 'MEMBER NAME', 'FLAT NO', 'MEMBER ID',
+      'DEBIT TYPES', 'DEPOSIT ACCOUNTS', 'PAYMENT MODES', 'ALLOCATION MODES',
+      'NET DUE', 'PRINCIPAL DUE', 'INTEREST DUE',
+      'CODE SLASH', 'CODE DASH', 'FLAT SLASH', 'FLAT DASH'
+    ]];
     for (var i = 0; i < maxLen; i++) {
       var mItem = listMembers[i] || {};
+      var rawCode = (mItem.memCode || '').toString().trim();
+      var rawFlat = (mItem.flatNo || '').toString().trim();
+      var codeSlash = rawCode ? rawCode.replace(/-/g, '/').replace(/\s+/g, '') : '';
+      var codeDash  = rawCode ? rawCode.replace(/\//g, '-').replace(/\s+/g, '') : '';
+      var flatSlash = rawFlat ? rawFlat.replace(/-/g, '/').replace(/\s+/g, '') : '';
+      var flatDash  = rawFlat ? rawFlat.replace(/\//g, '-').replace(/\s+/g, '') : '';
+
       wsListsData.push([
         listBillTypes[i] || '',
-        mItem.memCode || '',
-        mItem.memName || '',
-        mItem.flatNo || '',
+        rawCode,
+        (mItem.memName || '').toString().trim(),
+        rawFlat,
         mItem.memberId || '',
         listDebit[i] || '',
         listAccounts[i] || '',
@@ -2309,7 +2372,11 @@
         listAlloc[i] || '',
         mItem.netDue !== undefined ? mItem.netDue : 0,
         mItem.principalDue !== undefined ? mItem.principalDue : 0,
-        mItem.interestDue !== undefined ? mItem.interestDue : 0
+        mItem.interestDue !== undefined ? mItem.interestDue : 0,
+        codeSlash,
+        codeDash,
+        flatSlash,
+        flatDash
       ]);
     }
 
@@ -2329,12 +2396,6 @@
         allowBlank: true,
         sqref: 'C4:C' + maxDataRows,
         formula1: 'Lists!$B$2:$B$' + listMax
-      },
-      {
-        type: 'list',
-        allowBlank: true,
-        sqref: 'D4:D' + maxDataRows,
-        formula1: 'Lists!$C$2:$C$' + listMax
       },
       {
         type: 'list',
@@ -2377,6 +2438,10 @@
     closeAllToolbarDropdowns();
 
     var sid = getActiveSocietyId();
+    if (!sid) {
+      toast('Active society not identified. Please select a society first.', false);
+      return;
+    }
     var res = await fetchApiData('/api/member-receipts/export-data?societyId=' + sid);
     var exportRows = (res && res.data && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
 

@@ -297,6 +297,85 @@
   color: var(--bill-text);
 }
 
+/* 8. Tear-off Counterfoil Receipt Slip */
+.bill-tear-off-line {
+  border-top: 2px dashed #64748b;
+  margin: 18px 0 12px 0;
+  position: relative;
+  text-align: center;
+}
+
+.bill-tear-off-badge {
+  position: relative;
+  top: -9px;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #64748b;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bill-counterfoil-card {
+  border: 1px solid var(--bill-border-dark);
+  border-radius: 4px;
+  background: #f8fafc;
+  padding: 10px 12px;
+  font-size: 8pt;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.bill-counterfoil-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.bill-fill-line {
+  display: inline-block;
+  border-bottom: 1px solid #475569;
+  min-width: 140px;
+  height: 12px;
+  margin: 0 4px;
+}
+
+.bill-marathi {
+  font-family: 'Noto Sans Devanagari', 'Segoe UI', Arial, sans-serif !important;
+}
+
+.bill-qr-box {
+  width: 78px;
+  height: 78px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.05);
+}
+
+.bill-qr-box svg {
+  width: 60px;
+  height: 60px;
+}
+
+.bill-qr-label {
+  font-size: 6pt;
+  font-weight: 700;
+  color: #1e3a8a;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
 /* Print Rules */
 @media print {
   body, html {
@@ -304,11 +383,12 @@
     padding: 0 !important;
     background: #ffffff !important;
   }
-  .module-top-bar, .filter-bar, .no-print, .sample-preview-badge {
+  .module-top-bar, .filter-strip, .kpi-summary-strip, .no-print, .sample-preview-badge {
     display: none !important;
   }
-  .bill-module-wrapper {
+  .bill-module-wrapper, .report-viewport {
     padding: 0 !important;
+    margin: 0 !important;
     background: #ffffff !important;
   }
   .bill-page {
@@ -318,6 +398,8 @@
     padding: 10mm 12mm !important;
     width: 210mm !important;
     min-height: 297mm !important;
+  }
+  .bill-page.page-break {
     page-break-after: always !important;
     break-after: page !important;
   }

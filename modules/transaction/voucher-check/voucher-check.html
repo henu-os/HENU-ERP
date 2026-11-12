@@ -34,7 +34,7 @@
       flex: 1; overflow: auto; background: #ffffff; border: 1px solid #cbd5e1;
     }
     table.erp-table {
-      width: 100%; min-width: 2100px; border-collapse: collapse; font-size: 11px;
+      width: 100%; min-width: 1750px; border-collapse: collapse; font-size: 11px;
     }
     table.erp-table th {
       background: #0D47A1; color: #ffffff; padding: 7px 10px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; text-align: left; border: 1px solid #0a3880; position: sticky; top: 0; z-index: 2; white-space: nowrap; user-select: none;
@@ -113,14 +113,17 @@
     </div>
 
     <!-- FILTER BAR ROW 2 (MATCHING IMAGES 1 & 2) -->
-    <div style="background:#f8fafc; padding:6px 14px; border-bottom:1px solid #cbd5e1; display:flex; gap:14px; align-items:center;">
+    <div style="background:#f8fafc; padding:6px 14px; border-bottom:1px solid #cbd5e1; display:flex; gap:14px; align-items:center; flex-shrink:0;">
       <div style="display:flex; align-items:center; gap:6px;">
         <span style="font-size:10px; font-weight:800; color:#475569;">VOUCHER TYPE</span>
-        <select class="form-sel" id="flt-vtype" onchange="renderList()" style="width:110px;">
+        <select class="form-sel" id="flt-vtype" onchange="renderList()" style="width:125px;">
           <option value="">-- All --</option>
           <option value="Payment">Payment</option>
-          <option value="Journal">Journal</option>
           <option value="Receipt">Receipt</option>
+          <option value="Journal">Journal</option>
+          <option value="Contra">Contra</option>
+          <option value="PurchaseOrder">Purchase Order</option>
+          <option value="BillTypeTransfer">Bill Type TRF</option>
         </select>
       </div>
 
@@ -142,115 +145,131 @@
       <span style="margin-left:auto; font-weight:700; color:#64748b; font-size:11px;" id="vc-count">0 vouchers</span>
     </div>
 
-    <!-- MAIN DATA TABLE GRID (22 COLUMNS MATCHING IMAGES 1 & 2) -->
-    <div class="erp-table-wrap" style="flex:1;">
-      <table class="erp-table">
-        <thead>
-          <tr>
-            <th style="width:65px;">TYPE</th>
-            <th style="width:85px;">NO.</th>
-            <th style="width:90px;">DATE</th>
-            <th style="width:110px; text-align:right;">AMOUNT</th>
-            <th style="width:65px; text-align:center;">CHECK</th>
-            <th style="width:115px; text-align:center;">NO COMM. SIGN</th>
-            <th style="width:115px; text-align:center;">NO RECV. SIGN</th>
-            <th style="width:105px; text-align:center;">NO SUPPORT</th>
-            <th style="width:105px; text-align:center;">NO MEETING</th>
-            <th style="width:85px; text-align:center;">NO TDS</th>
-            <th style="width:105px; text-align:center;">NO VOUCHER</th>
-            <th style="width:105px; text-align:center;">EXCESS CASH</th>
-            <th style="width:120px;">REMARK</th>
-            <th style="width:120px;">REMARK1</th>
-            <th style="width:100px;">CHQ NO.</th>
-            <th style="width:100px;">BILL NO.</th>
-            <th style="width:140px;">PERSON NAME</th>
-            <th style="width:140px;">PARTICULAR</th>
-            <th style="width:140px;">PARTICULAR1</th>
-            <th style="width:140px;">CASH / BANK</th>
-            <th style="width:90px;">STATUS</th>
-            <th>ENTRY NO.</th>
-          </tr>
-        </thead>
-        <tbody id="vc-list-tbody">
-          <!-- Rendered rows -->
-        </tbody>
-      </table>
-    </div>
+    <!-- MAIN WORKSPACE: LEFT (TABLE + LINE ITEMS) & RIGHT (FULL-HEIGHT AUDIT DETAILS) -->
+    <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
 
-    <!-- SUMMARY FOOTER BAR (MATCHING IMAGES 1 & 2) -->
-    <div style="background:#e2e8f0; border-top:1px solid #cbd5e1; padding:6px 14px; display:flex; gap:20px; align-items:center; font-size:11px; font-weight:700; color:#1e293b; flex-shrink:0;">
-      <span>Total: <span style="color:#0D47A1;" id="sum-tot-cnt">0</span></span>
-      <span>Approved: <span style="color:#2E7D32;" id="sum-app-cnt">0</span></span>
-      <span>Pending: <span style="color:#d97706;" id="sum-pnd-cnt">0</span></span>
-      <span>Rejected: <span style="color:#dc2626;" id="sum-rej-cnt">0</span></span>
-      <span style="margin-left:auto;">Total Amt: <span style="color:#0D47A1; font-size:12px;" id="sum-tot-amt">₹0.00</span></span>
-    </div>
+      <!-- LEFT AREA: VOUCHERS TABLE & LINE ITEMS SUBGRID -->
+      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; border-right:1px solid #cbd5e1;">
 
-    <!-- LOWER SPLIT PANELS (VOUCHER LINE ITEMS & VOUCHER DETAILS & AUDIT CHECKS MATCHING IMAGES 1 & 2) -->
-    <div style="display:flex; height:240px; border-top:2px solid #0D47A1; flex-shrink:0; background:#f8fafc;">
-      
-      <!-- LEFT LOWER PANEL: VOUCHER LINE ITEMS -->
-      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; border-right:1px solid #cbd5e1;">
-        <div style="background:#0D47A1; color:#ffffff; padding:5px 10px; font-size:11px; font-weight:800; text-transform:uppercase;">
-          <i class="bi bi-list-task"></i> VOUCHER LINE ITEMS
-        </div>
-        <div style="flex:1; overflow:auto; background:#fff;">
-          <table style="width:100%; border-collapse:collapse; font-size:11px;">
+        <!-- MAIN DATA TABLE GRID -->
+        <div class="erp-table-wrap" style="flex:1; overflow:auto;">
+          <table class="erp-table">
             <thead>
-              <tr style="background:#f1f5f9; color:#475569; border-bottom:1px solid #cbd5e1; font-weight:800;">
-                <th style="padding:5px 8px; text-align:left; border-right:1px solid #e2e8f0; width:70px;">CODE</th>
-                <th style="padding:5px 8px; text-align:left; border-right:1px solid #e2e8f0;">ACCOUNT NAME</th>
-                <th style="padding:5px 8px; text-align:right; border-right:1px solid #e2e8f0; width:95px;">DEBIT</th>
-                <th style="padding:5px 8px; text-align:right; border-right:1px solid #e2e8f0; width:95px;">CREDIT</th>
-                <th style="padding:5px 8px; text-align:center; border-right:1px solid #e2e8f0; width:55px;">GST</th>
-                <th style="padding:5px 8px; text-align:left; width:95px;">LEDGER TYPE</th>
+              <tr>
+                <th style="width:65px;">TYPE</th>
+                <th style="width:85px;">NO.</th>
+                <th style="width:90px;">DATE</th>
+                <th style="width:95px;">CHQ NO.</th>
+                <th style="width:95px;">BILL NO.</th>
+                <th style="width:140px;">PERSON NAME</th>
+                <th style="width:160px;">PARTICULAR</th>
+                <th style="width:130px;">CASH / BANK</th>
+                <th style="width:105px; text-align:right;">AMOUNT</th>
+                <th style="width:85px; text-align:center;">STATUS</th>
+                <th style="width:55px; text-align:center;">CHECK</th>
+                <th style="width:105px; text-align:center;">NO COMM. SIGN</th>
+                <th style="width:105px; text-align:center;">NO RECV. SIGN</th>
+                <th style="width:100px; text-align:center;">NO SUPPORT</th>
+                <th style="width:100px; text-align:center;">NO MEETING</th>
+                <th style="width:75px; text-align:center;">NO TDS</th>
+                <th style="width:95px; text-align:center;">NO VOUCHER</th>
+                <th style="width:95px; text-align:center;">EXCESS CASH</th>
+                <th style="width:115px;">REMARK</th>
+                <th style="width:115px;">REMARK1</th>
+                <th style="width:120px;">PARTICULAR2</th>
+                <th style="width:75px;">ENTRY NO.</th>
               </tr>
             </thead>
-            <tbody id="vc-subgrid-tbody">
-              <tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">Select a voucher</td></tr>
+            <tbody id="vc-list-tbody">
+              <!-- Rendered rows -->
             </tbody>
           </table>
         </div>
+
+        <!-- SUMMARY FOOTER BAR -->
+        <div style="background:#e2e8f0; border-top:1px solid #cbd5e1; padding:6px 14px; display:flex; gap:20px; align-items:center; font-size:11px; font-weight:700; color:#1e293b; flex-shrink:0;">
+          <span>Total: <span style="color:#0D47A1;" id="sum-tot-cnt">0</span></span>
+          <span>Approved: <span style="color:#2E7D32;" id="sum-app-cnt">0</span></span>
+          <span>Pending: <span style="color:#d97706;" id="sum-pnd-cnt">0</span></span>
+          <span>Rejected: <span style="color:#dc2626;" id="sum-rej-cnt">0</span></span>
+          <span style="margin-left:auto;">Total Amt: <span style="color:#0D47A1; font-size:12px;" id="sum-tot-amt">₹0.00</span></span>
+        </div>
+
+        <!-- LOWER LEFT: VOUCHER LINE ITEMS -->
+        <div style="height:210px; border-top:2px solid #0D47A1; flex-shrink:0; display:flex; flex-direction:column; background:#ffffff;">
+          <div style="background:#0D47A1; color:#ffffff; padding:5px 10px; font-size:11px; font-weight:800; text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+            <i class="bi bi-list-task"></i> VOUCHER LINE ITEMS
+          </div>
+          <div style="flex:1; overflow:auto; background:#fff;">
+            <table style="width:100%; border-collapse:collapse; font-size:11px;">
+              <thead>
+                <tr style="background:#f1f5f9; color:#475569; border-bottom:1px solid #cbd5e1; font-weight:800;">
+                  <th style="padding:5px 8px; text-align:left; border-right:1px solid #e2e8f0; width:75px;">CODE</th>
+                  <th style="padding:5px 8px; text-align:left; border-right:1px solid #e2e8f0;">ACCOUNT NAME</th>
+                  <th style="padding:5px 8px; text-align:right; border-right:1px solid #e2e8f0; width:95px;">DEBIT</th>
+                  <th style="padding:5px 8px; text-align:right; border-right:1px solid #e2e8f0; width:95px;">CREDIT</th>
+                  <th style="padding:5px 8px; text-align:center; border-right:1px solid #e2e8f0; width:55px;">GST</th>
+                  <th style="padding:5px 8px; text-align:left; width:95px;">LEDGER TYPE</th>
+                </tr>
+              </thead>
+              <tbody id="vc-subgrid-tbody">
+                <tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">Select a voucher to view line items</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
 
-      <!-- RIGHT LOWER PANEL: VOUCHER DETAILS & AUDIT CHECKS -->
-      <div style="width:580px; flex-shrink:0; display:flex; flex-direction:column; overflow-y:auto; border-left:1px solid #cbd5e1; background:#ffffff;">
-        <div style="background:#0D47A1; color:#ffffff; padding:5px 10px; font-size:11px; font-weight:800; text-transform:uppercase;">
-          <i class="bi bi-card-checklist"></i> VOUCHER DETAILS & AUDIT CHECKS
+      <!-- RIGHT SIDE PANEL: VOUCHER DETAILS & AUDIT CHECKS (FULL HEIGHT DOCKED ON RIGHT) -->
+      <div style="width:420px; flex-shrink:0; display:flex; flex-direction:column; overflow-y:auto; background:#ffffff;">
+        <div style="background:#0D47A1; color:#ffffff; padding:6px 12px; font-size:11px; font-weight:800; text-transform:uppercase; display:flex; align-items:center; justify-content:space-between;">
+          <span><i class="bi bi-card-checklist"></i> VOUCHER DETAILS & AUDIT CHECKS</span>
         </div>
         
-        <div style="padding:10px; display:flex; gap:12px; flex:1;">
+        <div style="padding:10px 12px; display:flex; flex-direction:column; gap:6px; flex:1;">
           
-          <!-- FIELDS COLUMN -->
-          <div style="flex:1; display:flex; flex-direction:column; gap:5px;">
-            <div style="display:flex; gap:6px;">
-              <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">CHQ NO</label><input type="text" class="form-inp" id="det-chqno" style="width:100%;"></div>
-              <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">CHQ DATE</label><input type="date" class="form-inp" id="det-chqdate" style="width:100%;"></div>
+          <!-- FIELDS -->
+          <div style="display:flex; gap:6px;">
+            <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">CHQ NO</label><input type="text" class="form-inp" id="det-chqno" style="width:100%;"></div>
+            <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">CHQ DATE</label><input type="date" class="form-inp" id="det-chqdate" style="width:100%;"></div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">BILL NO</label><input type="text" class="form-inp" id="det-billno" style="width:100%;"></div>
+            <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">PERSON</label><input type="text" class="form-inp" id="det-person" style="width:100%;"></div>
+          </div>
+          <div><label style="font-size:10px; font-weight:800; color:#475569;">PARTICULAR</label><input type="text" class="form-inp" id="det-particular" maxlength="75" title="Maximum 75 characters with spaces" style="width:100%;"></div>
+          <div><label style="font-size:10px; font-weight:800; color:#475569;">VOUCHER NARRATION</label><input type="text" class="form-inp" id="det-narration" maxlength="75" title="Maximum 75 characters with spaces" style="width:100%;"></div>
+          <div><label style="font-size:10px; font-weight:800; color:#475569;">APPROVAL REMARK</label><input type="text" class="form-inp" id="det-app-remark" style="width:100%;"></div>
+          <div><label style="font-size:10px; font-weight:800; color:#475569;">AUDITOR REMARK</label><input type="text" class="form-inp" id="det-aud-remark" style="width:100%;"></div>
+          <div><label style="font-size:10px; font-weight:800; color:#dc2626;">REJECTION REASON</label><input type="text" class="form-inp" id="det-rej-reason" style="width:100%; border-color:#fca5a5;"></div>
+
+          <!-- CHECKBOXES PANEL -->
+          <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:6px 8px; margin-top:2px;">
+            <div style="font-size:9.5px; font-weight:800; color:#0D47A1; text-transform:uppercase; border-bottom:1px solid #cbd5e1; padding-bottom:3px; margin-bottom:5px;">
+              AUDIT CHECKS CHECKLIST
             </div>
-            <div style="display:flex; gap:6px;">
-              <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">BILL NO</label><input type="text" class="form-inp" id="det-billno" style="width:100%;"></div>
-              <div style="flex:1;"><label style="font-size:10px; font-weight:800; color:#475569;">PERSON</label><input type="text" class="form-inp" id="det-person" style="width:100%;"></div>
-            </div>
-            <div><label style="font-size:10px; font-weight:800; color:#475569;">PARTICULAR</label><input type="text" class="form-inp" id="det-particular" maxlength="75" title="Maximum 75 characters with spaces" style="width:100%;"></div>
-            <div><label style="font-size:10px; font-weight:800; color:#475569;">VOUCHER NARRATION</label><input type="text" class="form-inp" id="det-narration" maxlength="75" title="Maximum 75 characters with spaces" style="width:100%;"></div>
-            <div><label style="font-size:10px; font-weight:800; color:#475569;">APPROVAL REMARK</label><input type="text" class="form-inp" id="det-app-remark" style="width:100%;"></div>
-            <div><label style="font-size:10px; font-weight:800; color:#475569;">AUDITOR REMARK</label><input type="text" class="form-inp" id="det-aud-remark" style="width:100%;"></div>
-            <div><label style="font-size:10px; font-weight:800; color:#dc2626;">REJECTION REASON</label><input type="text" class="form-inp" id="det-rej-reason" style="width:100%; border-color:#fca5a5;"></div>
-            <div style="font-size:10px; color:#64748b; font-weight:600; margin-top:2px;">
-              Updated By: <span id="det-updated-by" style="color:#0f172a;">-</span>  Time: <span id="det-updated-time" style="color:#0f172a;">-</span>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px 8px;">
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-check"> CHECKED</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noComm"> NO COMM. SIGN</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noRecv"> NO RECV. SIGN</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noSupp"> NO SUPPORTING</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noMeet"> NO MEETING</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noTds"> NO TDS</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noVouch"> NO VOUCHER</label>
+              <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-excessCash"> EXCESS CASH</label>
             </div>
           </div>
 
-          <!-- CHECKBOXES PANEL -->
-          <div style="width:150px; flex-shrink:0; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; padding:6px; display:flex; flex-direction:column; gap:4px;">
-            <div style="font-size:9.5px; font-weight:800; color:#0D47A1; text-transform:uppercase; border-bottom:1px solid #cbd5e1; padding-bottom:3px; margin-bottom:2px;">AUDIT CHECKS</div>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-check"> CHECKED</label>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noComm"> NO COMM. SIGN</label>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noRecv"> NO RECV. SIGN</label>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noSupp"> NO SUPPORTING</label>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noMeet"> NO MEETING</label>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noTds"> NO TDS</label>
-            <label style="font-size:10.5px; font-weight:600; display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="checkbox" id="chk-noVouch"> NO VOUCHER</label>
+          <!-- AUDIT ACTION BUTTONS -->
+          <div style="display:flex; gap:6px; margin-top:4px;">
+            <button class="btn-tb-blue" onclick="processUpdate()" style="flex:1; justify-content:center; padding:5px;"><i class="bi bi-save"></i> Save Remarks</button>
+            <button class="btn-tb-blue" onclick="processApprove()" style="background:#2E7D32; flex:1; justify-content:center; padding:5px;"><i class="bi bi-check-circle-fill"></i> Approve</button>
+            <button class="btn-tb-blue" onclick="processReject()" style="background:#dc2626; flex:1; justify-content:center; padding:5px;"><i class="bi bi-x-circle-fill"></i> Reject</button>
+          </div>
+
+          <div style="font-size:10px; color:#64748b; font-weight:600; margin-top:auto; padding-top:6px; border-top:1px solid #e2e8f0;">
+            Updated By: <span id="det-updated-by" style="color:#0f172a;">-</span>  Time: <span id="det-updated-time" style="color:#0f172a;">-</span>
           </div>
 
         </div>

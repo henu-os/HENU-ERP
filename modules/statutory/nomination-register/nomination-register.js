@@ -1,6 +1,7 @@
 /**
  * nomination-register.js — Jeevika ERP v2
- * Statutory Nomination Register (Form 25) Implementation
+ * Statutory Nomination Register (Form 25 / Bye-Law 32)
+ * Fully connected to /api/statutory/nomination-register
  */
 
 (function () {
@@ -16,14 +17,21 @@
     refreshData();
   });
 
+  function getApiBase() {
+    if (window.API_BASE_URL) return window.API_BASE_URL;
+    if (window.AppConfig && window.AppConfig.apiBase) return window.AppConfig.apiBase;
+    if (window.CONFIG && window.CONFIG.API_BASE) return window.CONFIG.API_BASE;
+    return 'http://localhost:5002/api';
+  }
+
   function getActiveSocietyId() {
     return (window.Auth && Auth.getSocietyId) ? Auth.getSocietyId() : (sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || '1');
   }
 
-  function initHeaderInfo() {
-    var socName = (window.Auth && Auth.getSocietyName) ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || localStorage.getItem('activeSocietyName') || 'SHREE SAI CO-OP HOUSING SOCIETY LTD.');
-    var regNo = localStorage.getItem('jeevika_society_reg_no') || sessionStorage.getItem('activeSocietyRegNo') || 'REG-MH/MUM/2012/9847';
-    var address = localStorage.getItem('jeevika_society_address') || sessionStorage.getItem('activeSocietyAddress') || 'Plot No. 42, Sector 14, Palm Beach Road, Vashi, Navi Mumbai, Maharashtra - 400703';
+  function initHeaderInfo(socInfo) {
+    var socName = (socInfo && socInfo.SocietyName) || (window.Auth && Auth.getSocietyName ? Auth.getSocietyName() : 'SHREE SAI CO-OP HOUSING SOCIETY LTD.');
+    var regNo = (socInfo && socInfo.RegistrationNo) || localStorage.getItem('jeevika_society_reg_no') || 'REG-MH/MUM/2012/9847';
+    var address = (socInfo && socInfo.Address) || localStorage.getItem('jeevika_society_address') || 'Palm Beach Road, Vashi, Navi Mumbai, Maharashtra';
 
     var today = new Date();
     var dd = String(today.getDate()).padStart(2, '0');
@@ -31,114 +39,54 @@
     var yyyy = today.getFullYear();
     var dateStr = dd + '/' + mm + '/' + yyyy;
 
-    document.getElementById('nr-soc-name').textContent = socName.toUpperCase();
-    document.getElementById('nr-soc-reg').textContent = regNo;
-    document.getElementById('nr-date').textContent = dateStr;
-    document.getElementById('nr-soc-addr').textContent = address;
+    var nameEl = document.getElementById('nr-soc-name');
+    var regEl = document.getElementById('nr-soc-reg');
+    var dateEl = document.getElementById('nr-date');
+    var addrEl = document.getElementById('nr-soc-addr');
+
+    if (nameEl) nameEl.textContent = socName.toUpperCase();
+    if (regEl) regEl.textContent = regNo;
+    if (dateEl) dateEl.textContent = dateStr;
+    if (addrEl) addrEl.textContent = address;
   }
 
   window.refreshData = async function () {
     var sid = getActiveSocietyId();
-    nominationsData = [];
+    var tbody = document.getElementById('mainTableBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:30px;"><div class="erp-spinner"></div> Loading Statutory Nomination Register (Bye-Law 32)...</td></tr>';
+    }
 
-    // 1. Try API fetch for members/nominations
     try {
-      if (window.API && API.get) {
-        var res = await API.get('/api/members?societyId=' + sid);
-        if (res && Array.isArray(res)) {
-          res.forEach(function (m, idx) {
-            if (m.nomineeName || m.nominees) {
-              nominationsData.push({
-                srNo: nominationsData.length + 1,
-                memberName: (m.memName || m.memberName || m.name || 'Member ' + (idx + 1)) + ' (' + (m.wing ? m.wing + '-' : '') + (m.flatNo || '101') + ')',
-                nominationDate: m.nominationDate || '15/04/2021',
-                nomineeDetails: (m.nomineeName || 'Sunita Sharma') + ' (' + (m.nomineeRelation || 'Spouse') + ')<br><small style="color:#64748b;">' + (m.nomineeAddress || 'A-101, Society Premises') + '</small>',
-                percentage: (m.nomineePercent || 100).toFixed(2) + '%',
-                meetingDate: m.mcMeetingDate || '20/04/2021',
-                revocationDate: m.revocationDate || '—',
-                remarks: m.remarks || 'Approved in MC Meeting No. ' + (idx + 4)
-              });
-            }
-          });
-        }
+      var res = await fetch(getApiBase() + '/statutory/nomination-register?societyId=' + sid);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var json = await res.json();
+
+      if (json.success && Array.isArray(json.data)) {
+        if (json.society) initHeaderInfo(json.society);
+        nominationsData = json.data.map(function (n, idx) {
+          return {
+            srNo: n.srNo || (idx + 1),
+            memberName: n.memberName + ' (' + n.flatNo + ')',
+            nominationDate: n.receiptDate || '—',
+            nomineeDetails: '<strong>' + escHtml(n.nomineeName) + '</strong> (' + escHtml(n.relationship || 'Spouse') + ')' +
+              (n.nomineeAddress ? '<br><small style="color:#64748b;">' + escHtml(n.nomineeAddress) + '</small>' : ''),
+            percentage: Number(n.sharePercentage || 100).toFixed(2) + '%',
+            meetingDate: n.committeeApprovalDate || '—',
+            revocationDate: (n.status === 'Revoked') ? 'Revoked' : '—',
+            remarks: 'Resolution: ' + (n.resolutionNo || 'MC-RES-01') + ' (' + (n.status || 'Active') + ')'
+          };
+        });
+        renderTable(nominationsData);
+      } else {
+        throw new Error('No records returned');
       }
     } catch (e) {
-      console.warn("API fetch offline for nominations", e);
+      console.warn("API fetch error for nominations:", e);
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#ef4444;">Failed to load Nomination Register: ' + e.message + '</td></tr>';
+      }
     }
-
-    // 2. Try localStorage fallback for members
-    if (nominationsData.length === 0) {
-      try {
-        var stored = localStorage.getItem('jeevika_master_members') || localStorage.getItem('mmList') || localStorage.getItem('jeevika_members_' + sid);
-        if (stored) {
-          var memList = JSON.parse(stored);
-          if (Array.isArray(memList)) {
-            memList.forEach(function (m) {
-              if (m.nomineeName || m.nominees) {
-                nominationsData.push({
-                  srNo: nominationsData.length + 1,
-                  memberName: (m.memName || m.memberName || m.name || '') + ' (' + (m.flatNo || '101') + ')',
-                  nominationDate: m.nominationDate || '10/05/2022',
-                  nomineeDetails: (m.nomineeName || 'Nominee Person') + '<br><small style="color:#64748b;">' + (m.nomineeAddress || 'Society Flat') + '</small>',
-                  percentage: (m.nomineePercent || 100).toFixed(2) + '%',
-                  meetingDate: m.mcMeetingDate || '15/05/2022',
-                  revocationDate: m.revocationDate || '—',
-                  remarks: m.remarks || 'Form 25 nomination registered'
-                });
-              }
-            });
-          }
-        }
-      } catch (e) {}
-    }
-
-    // 3. Fallback Seed Data matching statutory format
-    if (nominationsData.length === 0) {
-      nominationsData = [
-        {
-          srNo: 1,
-          memberName: 'Rameshchandra Sharma (A-101)',
-          nominationDate: '15/04/2021',
-          nomineeDetails: 'Sunita Ramesh Sharma (Wife)<br><small style="color:#64748b;">Flat A-101, Shree Sai CHS, Vashi</small>',
-          percentage: '100.00%',
-          meetingDate: '25/04/2021',
-          revocationDate: '—',
-          remarks: 'Form 25 filed; Resolution No. 04'
-        },
-        {
-          srNo: 2,
-          memberName: 'Anil Kumar Mehta (A-102)',
-          nominationDate: '10/08/2021',
-          nomineeDetails: '1. Kavita Mehta (Wife) - 50%<br>2. Rohan Mehta (Son) - 50%<br><small style="color:#64748b;">Flat A-102, Shree Sai CHS, Vashi</small>',
-          percentage: '100.00%',
-          meetingDate: '18/08/2021',
-          revocationDate: '—',
-          remarks: 'Joint nomination in equal ratio'
-        },
-        {
-          srNo: 3,
-          memberName: 'Suresh Patel (A-201)',
-          nominationDate: '05/01/2020',
-          nomineeDetails: 'Meena Suresh Patel (Wife)<br><small style="color:#64748b;">Flat A-201, Shree Sai CHS, Vashi</small>',
-          percentage: '100.00%',
-          meetingDate: '15/01/2020',
-          revocationDate: '10/01/2025',
-          remarks: 'Revoked & fresh nomination submitted'
-        },
-        {
-          srNo: 4,
-          memberName: 'Vikram Singh (B-302)',
-          nominationDate: '12/03/2023',
-          nomineeDetails: 'Priyanka Singh (Daughter)<br><small style="color:#64748b;">B-302, Shree Sai CHS, Vashi</small>',
-          percentage: '100.00%',
-          meetingDate: '22/03/2023',
-          revocationDate: '—',
-          remarks: 'Original nomination form verified'
-        }
-      ];
-    }
-
-    renderTable(nominationsData);
   };
 
   function renderTable(data) {

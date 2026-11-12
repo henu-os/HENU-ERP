@@ -362,12 +362,15 @@
         ? ERP_MultiChange.renderCheckbox(tId)
         : '<td style="width:36px; text-align:center;"><input type="checkbox" class="row-chk" value="' + tId + '"></td>';
 
-      html += '<tr class="' + (isSel ? 'selected' : '') + '" data-id="'+(b.trfId||b.voucherId||b.voucherNo||b.trfNo||'')+'" onclick="selectTransferRow(this.dataset.id, this)" ondblclick="editSelectedTransfer(this.dataset.id)">' +
+        var flatLabel = (b.flatNo || '—') + (b.member2Flat && b.member2Flat !== b.flatNo ? ' ➔ ' + b.member2Flat : '');
+        var memLabel = (b.memberName || '') + (b.member2Name && b.member2Name !== b.memberName ? ' ➔ ' + b.member2Name : '');
+
+        html += '<tr class="' + (isSel ? 'selected' : '') + '" data-id="'+(b.trfId||b.voucherId||b.voucherNo||b.trfNo||'')+'" onclick="selectTransferRow(this.dataset.id, this)" ondblclick="editSelectedTransfer(this.dataset.id)">' +
         chkHtml +
         '<td style="font-weight:700; color:#1565C0;">' + (b.trfNo || '') + '</td>' +
         '<td>' + (b.trfDate || '') + '</td>' +
-        '<td style="text-align:center; font-weight:600;">' + (b.flatNo || '—') + '</td>' +
-        '<td style="font-weight:700;">' + (b.memberName || '') + '</td>' +
+        '<td style="text-align:center; font-weight:600;">' + flatLabel + '</td>' +
+        '<td style="font-weight:700;">' + memLabel + '</td>' +
         '<td style="font-weight:600; color:#1565C0;">' + (b.leftBillType || '—') + '</td>' +
         '<td style="text-align:center; font-weight:700; color:#dc2626;">' + (b.leftType || 'Dr') + '</td>' +
         '<td style="font-weight:600; color:#2E7D32;">' + (b.rightBillType || '—') + '</td>' +
@@ -811,11 +814,16 @@
       date: trfDateIso,
       member1Id: parseInt(m1Val, 10),
       member2Id: parseInt(m2Val, 10),
+      memberId: parseInt(m1Val, 10),
       memberName: m1Obj ? (m1Obj.memName || m1Obj.memberName || m1Obj.name) : '',
       memName: m1Obj ? (m1Obj.memName || m1Obj.memberName || m1Obj.name) : '',
+      member1Name: m1Obj ? (m1Obj.memName || m1Obj.memberName || m1Obj.name) : '',
       flatNo: m1Obj ? (((m1Obj.wing ? m1Obj.wing + '-' : '') + (m1Obj.flatNo || '')) || '—') : '—',
+      member1Flat: m1Obj ? (((m1Obj.wing ? m1Obj.wing + '-' : '') + (m1Obj.flatNo || '')) || '—') : '—',
       memberCode: m1Obj ? (m1Obj.memCode || m1Obj.memberCode || '') : '',
+      member1Code: m1Obj ? (m1Obj.memCode || m1Obj.memberCode || '') : '',
       member2Name: m2Obj ? (m2Obj.memName || m2Obj.memberName || m2Obj.name) : '',
+      member2Code: m2Obj ? (m2Obj.memCode || m2Obj.memberCode || '') : '',
       member2Flat: m2Obj ? (((m2Obj.wing ? m2Obj.wing + '-' : '') + (m2Obj.flatNo || '')) || '—') : '—',
       leftBillType: document.getElementById('v1-billtype').value,
       leftType: document.getElementById('v1-type').value,

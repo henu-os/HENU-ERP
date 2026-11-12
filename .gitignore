@@ -1,9 +1,13 @@
 Desktop/dist/
 Desktop/node_modules/
+Desktop/resources/
+Relese2026/
 node_modules/
 dist/
 Backend/bin/
 Backend/obj/
+Backend/publish/
+Backend/publish_selfcontained/
 Database/test_*.db
 Database/fresh_target_*.db
 Database/*.db-journal

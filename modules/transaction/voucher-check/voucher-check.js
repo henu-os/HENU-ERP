@@ -56,18 +56,73 @@
   async function loadVouchers() {
     var sid = getActiveSocietyId();
     var fyid = getFyId();
-    var data = await fetchApiData('/api/vouchers?societyId=' + sid + '&fyId=' + fyid);
+    
+    // Fetch vouchers for active society and FY
+    var res = await fetchApiData('/api/vouchers?societyId=' + sid + '&fyId=' + fyid);
 
-    if (data && Array.isArray(data)) vouchers = data;
-
-    if (!vouchers || vouchers.length === 0) {
-      var stored = localStorage.getItem('jeevika_voucher_check_' + sid);
-      if (stored) {
-        try { vouchers = JSON.parse(stored); } catch (e) {}
+    var list = [];
+    if (res) {
+      if (Array.isArray(res)) {
+        list = res;
+      } else if (Array.isArray(res.data)) {
+        list = res.data;
+      } else if (Array.isArray(res.items)) {
+        list = res.items;
       }
     }
 
-    if (!vouchers) vouchers = [];
+    // Fallback: If no vouchers returned for this specific fyId, try fyId=0 (all FYs for this society)
+    if ((!list || list.length === 0) && fyid && String(fyid) !== '0') {
+      var fallbackRes = await fetchApiData('/api/vouchers?societyId=' + sid + '&fyId=0');
+      if (fallbackRes) {
+        if (Array.isArray(fallbackRes)) {
+          list = fallbackRes;
+        } else if (Array.isArray(fallbackRes.data)) {
+          list = fallbackRes.data;
+        } else if (Array.isArray(fallbackRes.items)) {
+          list = fallbackRes.items;
+        }
+      }
+    }
+
+    // Merge any locally updated audit check states
+    var stored = localStorage.getItem('jeevika_voucher_check_' + sid);
+    if (stored) {
+      try {
+        var localList = JSON.parse(stored);
+        if (Array.isArray(localList)) {
+          var map = {};
+          localList.forEach(function (x) {
+            var k = String(x.voucherNo || x.voucherId || x.id || '');
+            if (k) map[k] = x;
+          });
+          list.forEach(function (v) {
+            var k = String(v.voucherNo || v.voucherId || v.id || '');
+            if (map[k]) {
+              v.auditStatus = map[k].auditStatus || v.auditStatus;
+              v.status = map[k].status || v.status;
+              v.chkChecked = (map[k].chkChecked !== undefined) ? map[k].chkChecked : v.chkChecked;
+              v.chkNoComm = (map[k].chkNoComm !== undefined) ? map[k].chkNoComm : v.chkNoComm;
+              v.chkNoRecv = (map[k].chkNoRecv !== undefined) ? map[k].chkNoRecv : v.chkNoRecv;
+              v.chkNoSupp = (map[k].chkNoSupp !== undefined) ? map[k].chkNoSupp : v.chkNoSupp;
+              v.chkNoMeet = (map[k].chkNoMeet !== undefined) ? map[k].chkNoMeet : v.chkNoMeet;
+              v.chkNoTds = (map[k].chkNoTds !== undefined) ? map[k].chkNoTds : v.chkNoTds;
+              v.chkNoVouch = (map[k].chkNoVouch !== undefined) ? map[k].chkNoVouch : v.chkNoVouch;
+              v.chkExcessCash = (map[k].chkExcessCash !== undefined) ? map[k].chkExcessCash : v.chkExcessCash;
+              v.remark = map[k].remark || v.remark;
+              v.remark1 = map[k].remark1 || v.remark1;
+              v.approvalRemark = map[k].approvalRemark || v.approvalRemark;
+              v.auditorRemark = map[k].auditorRemark || v.auditorRemark;
+              v.rejectionReason = map[k].rejectionReason || v.rejectionReason;
+              v.updatedBy = map[k].updatedBy || v.updatedBy;
+              v.updatedTime = map[k].updatedTime || v.updatedTime;
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    vouchers = list || [];
 
     var socEl = document.getElementById('vcSocName');
     if (socEl) socEl.textContent = (window.Auth && Auth.getSocietyName) ? Auth.getSocietyName() : 'Society Name';
@@ -113,16 +168,22 @@
 
     var html = '';
     filtered.forEach(function (v) {
-      var vNo = v.voucherNo || v.id;
-      var isSel = (vNo === selectedVoucherNo);
+      var vNo = v.voucherNo || v.voucherId || v.id;
+      var isSel = (String(vNo) === String(selectedVoucherNo));
       var st = v.auditStatus || v.status || 'Pending';
       var stColor = (st === 'Approved') ? '#2E7D32' : ((st === 'Rejected') ? '#dc2626' : '#d97706');
 
-      html += '<tr class="' + (isSel ? 'row-active' : '') + '" onclick="selectVoucherRow(\'' + vNo + '\')">' +
-        '<td>' + (v.voucherType || 'JV') + '</td>' +
-        '<td style="font-weight:700; color:#0D47A1;">' + (v.voucherNo || '-') + '</td>' +
-        '<td>' + (v.voucherDate || '-') + '</td>' +
+      html += '<tr class="' + (isSel ? 'row-active' : '') + '" onclick="selectVoucherRow(\'' + escHtml(vNo) + '\')">' +
+        '<td>' + escHtml(v.voucherType || 'JV') + '</td>' +
+        '<td style="font-weight:700; color:#0D47A1;">' + escHtml(v.voucherNo || '-') + '</td>' +
+        '<td>' + escHtml(v.voucherDate || '-') + '</td>' +
+        '<td>' + escHtml(v.chqNo || '-') + '</td>' +
+        '<td>' + escHtml(v.billNo || '-') + '</td>' +
+        '<td>' + escHtml(v.personName || '-') + '</td>' +
+        '<td>' + escHtml(v.particular1 || v.narration || '-') + '</td>' +
+        '<td>' + escHtml(v.bankName || v.cashBankName || '-') + '</td>' +
         '<td style="text-align:right; font-weight:700; font-family:\'Consolas\', monospace;">' + (v.amount ? parseFloat(v.amount).toFixed(2) : '0.00') + '</td>' +
+        '<td style="font-weight:700; color:' + stColor + '; text-align:center;">' + escHtml(st) + '</td>' +
         '<td style="text-align:center;">' + (v.chkChecked ? '✓' : '-') + '</td>' +
         '<td style="text-align:center;">' + (v.chkNoComm ? '✓' : '-') + '</td>' +
         '<td style="text-align:center;">' + (v.chkNoRecv ? '✓' : '-') + '</td>' +
@@ -131,16 +192,10 @@
         '<td style="text-align:center;">' + (v.chkNoTds ? '✓' : '-') + '</td>' +
         '<td style="text-align:center;">' + (v.chkNoVouch ? '✓' : '-') + '</td>' +
         '<td style="text-align:center;">' + (v.chkExcessCash ? '✓' : '-') + '</td>' +
-        '<td>' + (v.remark || '') + '</td>' +
-        '<td>' + (v.remark1 || '') + '</td>' +
-        '<td>' + (v.chqNo || '-') + '</td>' +
-        '<td>' + (v.billNo || '-') + '</td>' +
-        '<td>' + (v.personName || '-') + '</td>' +
-        '<td>' + (v.particular1 || v.narration || '-') + '</td>' +
-        '<td>' + (v.particular2 || '-') + '</td>' +
-        '<td>' + (v.bankName || v.cashBankName || '-') + '</td>' +
-        '<td style="font-weight:700; color:' + stColor + ';">' + st + '</td>' +
-        '<td>' + (v.entryNo || v.id || '-') + '</td>' +
+        '<td>' + escHtml(v.remark || v.auditorRemark || '') + '</td>' +
+        '<td>' + escHtml(v.remark1 || v.approvalRemark || '') + '</td>' +
+        '<td>' + escHtml(v.particular2 || '-') + '</td>' +
+        '<td>' + escHtml(v.entryNo || v.voucherId || v.id || '-') + '</td>' +
         '</tr>';
     });
 
@@ -210,37 +265,53 @@
     }, 100);
   }
 
-  window.selectVoucherRow = function (vNo) {
+  window.selectVoucherRow = async function (vNo) {
     selectedVoucherNo = vNo;
     renderList();
 
-    var v = vouchers.find(function (x) { return String(x.voucherNo || x.id) === String(vNo); });
+    var v = vouchers.find(function (x) { return String(x.voucherNo || x.voucherId || x.id) === String(vNo); });
     if (!v) return;
 
-    renderSubGrid(v);
     populateRightPanel(v);
+
+    // If items are not loaded yet, fetch details from backend API
+    if (!v.items && v.voucherId) {
+      try {
+        var det = await fetchApiData('/api/vouchers/' + v.voucherId);
+        if (det && det.items) {
+          v.items = det.items;
+        }
+      } catch (e) {}
+    }
+
+    renderSubGrid(v);
   };
 
   function renderSubGrid(v) {
     var tbody = document.getElementById('vc-subgrid-tbody');
     if (!tbody) return;
 
-    if (!v || !v.items || v.items.length === 0) {
-      var amt = v ? parseFloat(v.amount || 0) : 0;
-      tbody.innerHTML = '<tr><td>ACC-101</td><td>Expense Ledger Account</td><td style="text-align:right; font-family:\'Consolas\', monospace;">' + amt.toFixed(2) + '</td><td style="text-align:right;">0.00</td><td style="text-align:center;">No</td><td>General</td></tr>' +
-        '<tr><td>BANK-01</td><td>Bank Account</td><td style="text-align:right;">0.00</td><td style="text-align:right; font-family:\'Consolas\', monospace;">' + amt.toFixed(2) + '</td><td style="text-align:center;">No</td><td>Bank</td></tr>';
+    if (!v) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:25px; color:#94a3b8;">Select a voucher to view line items</td></tr>';
+      return;
+    }
+
+    if (!v.items || v.items.length === 0) {
+      var amt = parseFloat(v.amount || 0);
+      tbody.innerHTML = '<tr><td>' + escHtml(v.cashBankCode || 'ACC-101') + '</td><td style="font-weight:600;">' + escHtml(v.cashBankName || v.personName || 'Expense Ledger') + '</td><td style="text-align:right; font-family:\'Consolas\', monospace;">' + amt.toFixed(2) + '</td><td style="text-align:right;">0.00</td><td style="text-align:center;">No</td><td>' + escHtml(v.voucherType || 'General') + '</td></tr>' +
+        '<tr><td>' + escHtml(v.cashBankCode || 'BANK-01') + '</td><td style="font-weight:600;">' + escHtml(v.bankName || 'Bank/Cash Account') + '</td><td style="text-align:right;">0.00</td><td style="text-align:right; font-family:\'Consolas\', monospace;">' + amt.toFixed(2) + '</td><td style="text-align:center;">No</td><td>Bank</td></tr>';
       return;
     }
 
     var html = '';
     v.items.forEach(function (item) {
       html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
-        '<td>' + (item.code || '—') + '</td>' +
-        '<td style="font-weight:600;">' + (item.accountName || item.name || '—') + '</td>' +
+        '<td>' + escHtml(item.accountCode || item.code || '—') + '</td>' +
+        '<td style="font-weight:600;">' + escHtml(item.accountName || item.name || '—') + '</td>' +
         '<td style="text-align:right; font-family:\'Consolas\', monospace;">' + (item.debit ? parseFloat(item.debit).toFixed(2) : '0.00') + '</td>' +
         '<td style="text-align:right; font-family:\'Consolas\', monospace;">' + (item.credit ? parseFloat(item.credit).toFixed(2) : '0.00') + '</td>' +
         '<td style="text-align:center;">' + (item.gst || 'No') + '</td>' +
-        '<td>' + (item.ledgerType || 'General') + '</td>' +
+        '<td>' + escHtml(item.ledgerType || (parseFloat(item.debit) > 0 ? 'Debit' : 'Credit')) + '</td>' +
         '</tr>';
     });
     tbody.innerHTML = html;
@@ -267,13 +338,15 @@
     document.getElementById('chk-noMeet').checked = !!v.chkNoMeet;
     document.getElementById('chk-noTds').checked = !!v.chkNoTds;
     document.getElementById('chk-noVouch').checked = !!v.chkNoVouch;
+    var elExcess = document.getElementById('chk-excessCash');
+    if (elExcess) elExcess.checked = !!v.chkExcessCash;
   }
 
   // ── 3. ACTIONS: UPDATE, APPROVE, REJECT ────────────────────────────
   window.processUpdate = function () {
     if (!selectedVoucherNo) { toast('Please select a voucher from the grid first.', false); return; }
 
-    var v = vouchers.find(function (x) { return String(x.voucherNo || x.id) === String(selectedVoucherNo); });
+    var v = vouchers.find(function (x) { return String(x.voucherNo || x.voucherId || x.id) === String(selectedVoucherNo); });
     if (!v) return;
 
     v.chkChecked = document.getElementById('chk-check').checked;
@@ -283,6 +356,8 @@
     v.chkNoMeet = document.getElementById('chk-noMeet').checked;
     v.chkNoTds = document.getElementById('chk-noTds').checked;
     v.chkNoVouch = document.getElementById('chk-noVouch').checked;
+    var elExcess = document.getElementById('chk-excessCash');
+    if (elExcess) v.chkExcessCash = elExcess.checked;
 
     v.approvalRemark = document.getElementById('det-app-remark').value;
     v.auditorRemark = document.getElementById('det-aud-remark').value;
@@ -298,7 +373,7 @@
   window.processApprove = function () {
     if (!selectedVoucherNo) { toast('Please select a voucher from the grid first.', false); return; }
 
-    var v = vouchers.find(function (x) { return String(x.voucherNo || x.id) === String(selectedVoucherNo); });
+    var v = vouchers.find(function (x) { return String(x.voucherNo || x.voucherId || x.id) === String(selectedVoucherNo); });
     if (!v) return;
 
     v.auditStatus = 'Approved';
@@ -308,7 +383,7 @@
     v.updatedTime = todayISO();
 
     localStorage.setItem('jeevika_voucher_check_' + getActiveSocietyId(), JSON.stringify(vouchers));
-    toast('Voucher ' + v.voucherNo + ' approved successfully!', true);
+    toast('Voucher ' + (v.voucherNo || v.voucherId) + ' approved successfully!', true);
     renderList();
   };
 
@@ -326,7 +401,7 @@
     var reason = document.getElementById('rej-reason-input').value;
     if (!reason) { toast('Please enter a rejection reason.', false); return; }
 
-    var v = vouchers.find(function (x) { return String(x.voucherNo || x.id) === String(selectedVoucherNo); });
+    var v = vouchers.find(function (x) { return String(x.voucherNo || x.voucherId || x.id) === String(selectedVoucherNo); });
     if (v) {
       v.auditStatus = 'Rejected';
       v.status = 'Rejected';

@@ -57,6 +57,15 @@
         <span style="font-size:11.5px; font-weight:700; color:#334155; cursor:pointer;"
           onclick="document.getElementById('chk-member-breakup').click()">Member Dues Breakup</span>
       </div>
+
+      <div class="bs-filter-item" style="display:flex; align-items:center; gap:6px;">
+        <label class="erp-toggle-switch">
+          <input type="checkbox" id="chk-swap-footer" onchange="toggleBsFooterSwap()">
+          <span class="erp-toggle-slider"></span>
+        </label>
+        <span style="font-size:11.5px; font-weight:700; color:#334155; cursor:pointer;"
+          onclick="document.getElementById('chk-swap-footer').click()" id="lbl-swap-footer" title="Switch Left/Right Signatures">⇄ Swap Signatures (L/R)</span>
+      </div>
     </div>
 
     <div class="d-flex gap-6">

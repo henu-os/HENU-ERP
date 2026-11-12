@@ -27,10 +27,26 @@ namespace JeevikaERP.Controllers
 
                 cmd.CommandText = @"
                     SELECT vh.VoucherId, vh.SocietyId, vh.FYId, vh.VoucherNo, vh.VoucherDate, vh.Amount,
-                           vh.PersonName, vh.PersonType, vh.PersonCode, vh.RefNo, vh.Narration, vh.Status, vh.CreatedAt,
+                           vh.PersonName, vh.PersonType, vh.PersonCode, vh.RefNo, vh.Narration, vh.Particular1, vh.Particular2, vh.Status, vh.CreatedAt,
                            m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo
                     FROM jeevika_erp.SocVoucherHeader vh
-                    LEFT JOIN jeevika_erp.SocMember m ON (m.SocietyId = vh.SocietyId AND (m.MemCode = vh.PersonCode OR m.MemCode = vh.RefNo OR CONCAT(m.Wing, '-', m.FlatNo) = vh.RefNo OR vh.PersonName ILIKE CONCAT('%', m.MemName, '%') OR (vh.PersonCode ~ '^\d+$' AND m.MemberId = CAST(vh.PersonCode AS INTEGER))))
+                    LEFT JOIN LATERAL (
+                        SELECT sm.MemberId, sm.MemCode, sm.MemName, sm.Wing, sm.FlatNo
+                        FROM jeevika_erp.SocMember sm
+                        WHERE sm.SocietyId = vh.SocietyId
+                          AND sm.IsDeleted = FALSE
+                          AND (
+                              sm.MemCode = vh.PersonCode
+                              OR (vh.PersonCode ~ '^\d+$' AND sm.MemberId = CAST(vh.PersonCode AS INTEGER))
+                              OR CONCAT(sm.Wing, '-', sm.FlatNo) = vh.RefNo
+                              OR vh.PersonName ILIKE CONCAT('%', sm.MemName, '%')
+                          )
+                        ORDER BY 
+                          CASE WHEN sm.MemCode = vh.PersonCode THEN 0 
+                               WHEN (vh.PersonCode ~ '^\d+$' AND sm.MemberId = CAST(vh.PersonCode AS INTEGER)) THEN 1 
+                               ELSE 2 END
+                        LIMIT 1
+                    ) m ON TRUE
                     WHERE vh.SocietyId = @sid AND (@fyid = 0 OR vh.FYId = @fyid) AND vh.VoucherType = 'BillTypeTransfer' AND vh.IsDeleted = FALSE
                     ORDER BY vh.VoucherDate DESC, vh.VoucherId DESC";
 
@@ -58,9 +74,20 @@ namespace JeevikaERP.Controllers
                     var flatNo    = parts.Length > 4 ? parts[4] : (r["FlatNo"] != DBNull.Value ? r["FlatNo"].ToString() : "");
                     var part2     = parts.Length > 5 ? parts[5] : "Approved by Society";
 
-                    var mId = r["MemberId"] != DBNull.Value ? Convert.ToInt32(r["MemberId"]) : 0;
-                    var mCode = r["MemCode"] != DBNull.Value ? r["MemCode"].ToString() : (r["PersonCode"] != DBNull.Value ? r["PersonCode"].ToString() : "");
+                    var m1IdStr   = parts.Length > 6 ? parts[6] : "";
+                    var m2IdStr   = parts.Length > 7 ? parts[7] : "";
+                    var m1CodeStr = parts.Length > 8 ? parts[8] : "";
+                    var m2CodeStr = parts.Length > 9 ? parts[9] : "";
+                    var m2FlatStr = parts.Length > 10 ? parts[10] : "";
+                    var m2NameStr = parts.Length > 11 ? parts[11] : "";
+
+                    var mId = r["MemberId"] != DBNull.Value ? Convert.ToInt32(r["MemberId"]) : (int.TryParse(m1IdStr, out int pM1) ? pM1 : 0);
+                    var m2Id = int.TryParse(m2IdStr, out int pM2) && pM2 > 0 ? pM2 : mId;
+                    var mCode = r["MemCode"] != DBNull.Value ? r["MemCode"].ToString() : (!string.IsNullOrEmpty(m1CodeStr) ? m1CodeStr : (r["PersonCode"] != DBNull.Value ? r["PersonCode"].ToString() : ""));
                     var mName = r["MemName"] != DBNull.Value ? r["MemName"].ToString() : pName;
+                    var m2Name = !string.IsNullOrWhiteSpace(m2NameStr) ? m2NameStr : mName;
+                    var m2Code = !string.IsNullOrWhiteSpace(m2CodeStr) ? m2CodeStr : mCode;
+                    var m2Flat = !string.IsNullOrWhiteSpace(m2FlatStr) ? m2FlatStr : flatNo;
 
                     list.Add(new
                     {
@@ -72,10 +99,17 @@ namespace JeevikaERP.Controllers
                         trfDate        = vDate,
                         date           = vDate,
                         member1Id      = mId,
-                        member2Id      = mId,
+                        member2Id      = m2Id,
+                        memberId       = mId,
                         memberCode     = mCode,
+                        member1Code    = mCode,
                         memberName     = mName,
+                        member1Name    = mName,
                         memName        = mName,
+                        member2Id_val  = m2Id,
+                        member2Name    = m2Name,
+                        member2Code    = m2Code,
+                        member2Flat    = m2Flat,
                         wing           = r["Wing"] != DBNull.Value ? r["Wing"].ToString() : "",
                         flatNo         = flatNo,
                         leftBillType   = leftBt,
@@ -145,16 +179,23 @@ namespace JeevikaERP.Controllers
                 }
 
                 var memberName = !string.IsNullOrWhiteSpace(model.MemberName) ? model.MemberName : (!string.IsNullOrWhiteSpace(model.Member1Name) ? model.Member1Name : "Member");
+                var member2Name = !string.IsNullOrWhiteSpace(model.Member2Name) ? model.Member2Name : memberName;
+                var memberCode = !string.IsNullOrWhiteSpace(model.MemberCode) ? model.MemberCode.Trim() : (!string.IsNullOrWhiteSpace(model.MemCode) ? model.MemCode.Trim() : (!string.IsNullOrWhiteSpace(model.Member1Code) ? model.Member1Code.Trim() : ""));
+                var member2Code = !string.IsNullOrWhiteSpace(model.Member2Code) ? model.Member2Code.Trim() : memberCode;
+                var flatNo = !string.IsNullOrWhiteSpace(model.FlatNo) ? model.FlatNo : (!string.IsNullOrWhiteSpace(model.Member1Flat) ? model.Member1Flat : "");
+                var member2Flat = !string.IsNullOrWhiteSpace(model.Member2Flat) ? model.Member2Flat : flatNo;
+                var m1Id = model.Member1Id > 0 ? model.Member1Id : (model.MemberId > 0 ? model.MemberId : 0);
+                var m2Id = model.Member2Id > 0 ? model.Member2Id : m1Id;
+
                 var narration = !string.IsNullOrWhiteSpace(model.Particulars) ? model.Particulars : (!string.IsNullOrWhiteSpace(model.Particular1) ? model.Particular1 : $"Bill Type Transfer {model.LeftBillType} to {model.RightBillType}");
 
                 string leftName = !string.IsNullOrWhiteSpace(model.LeftBillType) ? model.LeftBillType : "Major Repair";
                 string rightName = !string.IsNullOrWhiteSpace(model.RightBillType) ? model.RightBillType : "Maintenance";
                 string leftType = !string.IsNullOrWhiteSpace(model.LeftType) ? model.LeftType : "Dr";
                 string rightType = !string.IsNullOrWhiteSpace(model.RightType) ? model.RightType : "Cr";
-                string flatNo = !string.IsNullOrWhiteSpace(model.FlatNo) ? model.FlatNo : "";
                 string part2 = !string.IsNullOrWhiteSpace(model.Particular2) ? model.Particular2 : "Approved by Society";
 
-                string metaRef = $"{leftName}|{leftType}|{rightName}|{rightType}|{flatNo}|{part2}";
+                string metaRef = $"{leftName}|{leftType}|{rightName}|{rightType}|{flatNo}|{part2}|{m1Id}|{m2Id}|{memberCode}|{member2Code}|{member2Flat}|{member2Name}";
 
                 // 1.5 Clean up any soft-deleted voucher with same number to prevent unique constraint violation
                 using var cleanCmd = conn.CreateCommand();
@@ -181,13 +222,16 @@ namespace JeevikaERP.Controllers
                          @person, 'Member', @pcode, @ref, @p1, @p2, @narr, 'Posted', FALSE, @user, NOW(), NOW())
                     RETURNING VoucherId";
 
-                var personNameFormatted = !string.IsNullOrWhiteSpace(model.MemberCode)
-                    ? $"[{model.MemberCode}] {memberName} ({model.FlatNo})"
-                    : (!string.IsNullOrWhiteSpace(model.FlatNo) ? $"{memberName} ({model.FlatNo})" : memberName);
+                var personNameFormatted = (m1Id != m2Id || (!string.IsNullOrWhiteSpace(member2Name) && !member2Name.Equals(memberName, StringComparison.OrdinalIgnoreCase)))
+                    ? $"[{memberCode}] {memberName} ({flatNo}) -> [{member2Code}] {member2Name} ({member2Flat})"
+                    : (!string.IsNullOrWhiteSpace(memberCode) ? $"[{memberCode}] {memberName} ({flatNo})" : (!string.IsNullOrWhiteSpace(flatNo) ? $"{memberName} ({flatNo})" : memberName));
 
-                var memCodeVal = !string.IsNullOrWhiteSpace(model.MemberCode)
-                    ? model.MemberCode.Trim()
-                    : (model.MemberId > 0 ? model.MemberId.ToString() : (model.FlatNo ?? ""));
+                var memCodeVal = !string.IsNullOrWhiteSpace(memberCode)
+                    ? memberCode
+                    : (m1Id > 0 ? m1Id.ToString() : (flatNo ?? ""));
+
+                string p1Text = $"[Transfer: {memberName} ({leftName}) -> {member2Name} ({rightName})]";
+                string p2Text = $"M1:{m1Id}:{memberCode} ({leftName} {leftType}) -> M2:{m2Id}:{member2Code} ({rightName} {rightType}) | {part2}";
 
                 vCmd.Parameters.AddWithValue("@sid",    model.SocietyId);
                 vCmd.Parameters.AddWithValue("@fyid",   model.FYId);
@@ -197,8 +241,8 @@ namespace JeevikaERP.Controllers
                 vCmd.Parameters.AddWithValue("@person", personNameFormatted);
                 vCmd.Parameters.AddWithValue("@pcode",  memCodeVal);
                 vCmd.Parameters.AddWithValue("@ref",    metaRef);
-                vCmd.Parameters.AddWithValue("@p1",     $"[Transfer: {leftName} to {rightName}]");
-                vCmd.Parameters.AddWithValue("@p2",     $"Trf: {leftName} ({leftType}) -> {rightName} ({rightType})");
+                vCmd.Parameters.AddWithValue("@p1",     p1Text);
+                vCmd.Parameters.AddWithValue("@p2",     p2Text);
                 vCmd.Parameters.AddWithValue("@narr",   narration);
                 vCmd.Parameters.AddWithValue("@user",   User.Identity?.Name ?? "ADMIN");
 
@@ -243,36 +287,44 @@ namespace JeevikaERP.Controllers
 
                 if (duesAccId > 0)
                 {
-                    // Detail Line 1: Left Bill Type Transfer Out (Credit)
+                    decimal d1Amt = leftType.Equals("Dr", StringComparison.OrdinalIgnoreCase) ? model.Amount : 0m;
+                    decimal c1Amt = leftType.Equals("Cr", StringComparison.OrdinalIgnoreCase) ? model.Amount : (d1Amt == 0 ? model.Amount : 0m);
+
+                    decimal d2Amt = rightType.Equals("Dr", StringComparison.OrdinalIgnoreCase) ? model.Amount : (c1Amt > 0 && leftType != rightType ? model.Amount : 0m);
+                    decimal c2Amt = rightType.Equals("Cr", StringComparison.OrdinalIgnoreCase) ? model.Amount : (d2Amt == 0 ? model.Amount : 0m);
+
+                    // Detail Line 1: Left Member/Bill Type
                     using var d1Cmd = conn.CreateCommand();
                     d1Cmd.Transaction = tx;
                     d1Cmd.CommandText = @"
                         INSERT INTO jeevika_erp.SocVoucherDetail
                             (VoucherId, SrNo, AccountId, AccountCode, AccountName, Debit, Credit, Narration)
                         VALUES
-                            (@vid, 1, @aid, @code, @name, 0, @amt, @narr)";
+                            (@vid, 1, @aid, @code, @name, @dr, @cr, @narr)";
                     d1Cmd.Parameters.AddWithValue("@vid",   voucherId);
                     d1Cmd.Parameters.AddWithValue("@aid",   duesAccId);
                     d1Cmd.Parameters.AddWithValue("@code",  duesCode);
                     d1Cmd.Parameters.AddWithValue("@name",  $"{duesName} [{leftName}]");
-                    d1Cmd.Parameters.AddWithValue("@amt",   model.Amount);
-                    d1Cmd.Parameters.AddWithValue("@narr",  $"Transfer Out from {leftName} for {memberName}");
+                    d1Cmd.Parameters.AddWithValue("@dr",    d1Amt);
+                    d1Cmd.Parameters.AddWithValue("@cr",    c1Amt);
+                    d1Cmd.Parameters.AddWithValue("@narr",  $"Transfer ({leftType}) {leftName} for {memberName} ({flatNo}) to {member2Name}");
                     d1Cmd.ExecuteNonQuery();
 
-                    // Detail Line 2: Right Bill Type Transfer In (Debit)
+                    // Detail Line 2: Right Member/Bill Type
                     using var d2Cmd = conn.CreateCommand();
                     d2Cmd.Transaction = tx;
                     d2Cmd.CommandText = @"
                         INSERT INTO jeevika_erp.SocVoucherDetail
                             (VoucherId, SrNo, AccountId, AccountCode, AccountName, Debit, Credit, Narration)
                         VALUES
-                            (@vid, 2, @aid, @code, @name, @amt, 0, @narr)";
+                            (@vid, 2, @aid, @code, @name, @dr, @cr, @narr)";
                     d2Cmd.Parameters.AddWithValue("@vid",   voucherId);
                     d2Cmd.Parameters.AddWithValue("@aid",   duesAccId);
                     d2Cmd.Parameters.AddWithValue("@code",  duesCode);
                     d2Cmd.Parameters.AddWithValue("@name",  $"{duesName} [{rightName}]");
-                    d2Cmd.Parameters.AddWithValue("@amt",   model.Amount);
-                    d2Cmd.Parameters.AddWithValue("@narr",  $"Transfer In to {rightName} for {memberName}");
+                    d2Cmd.Parameters.AddWithValue("@dr",    d2Amt);
+                    d2Cmd.Parameters.AddWithValue("@cr",    c2Amt);
+                    d2Cmd.Parameters.AddWithValue("@narr",  $"Transfer ({rightType}) {rightName} for {member2Name} ({member2Flat}) from {memberName}");
                     d2Cmd.ExecuteNonQuery();
                 }
 
@@ -302,28 +354,49 @@ namespace JeevikaERP.Controllers
                 using var tx   = conn.BeginTransaction();
 
                 var memberName = !string.IsNullOrWhiteSpace(model.MemberName) ? model.MemberName : (!string.IsNullOrWhiteSpace(model.Member1Name) ? model.Member1Name : "Member");
+                var member2Name = !string.IsNullOrWhiteSpace(model.Member2Name) ? model.Member2Name : memberName;
+                var memberCode = !string.IsNullOrWhiteSpace(model.MemberCode) ? model.MemberCode.Trim() : (!string.IsNullOrWhiteSpace(model.MemCode) ? model.MemCode.Trim() : (!string.IsNullOrWhiteSpace(model.Member1Code) ? model.Member1Code.Trim() : ""));
+                var member2Code = !string.IsNullOrWhiteSpace(model.Member2Code) ? model.Member2Code.Trim() : memberCode;
+                var flatNo = !string.IsNullOrWhiteSpace(model.FlatNo) ? model.FlatNo : (!string.IsNullOrWhiteSpace(model.Member1Flat) ? model.Member1Flat : "");
+                var member2Flat = !string.IsNullOrWhiteSpace(model.Member2Flat) ? model.Member2Flat : flatNo;
+                var m1Id = model.Member1Id > 0 ? model.Member1Id : (model.MemberId > 0 ? model.MemberId : 0);
+                var m2Id = model.Member2Id > 0 ? model.Member2Id : m1Id;
+
                 var narration = !string.IsNullOrWhiteSpace(model.Particulars) ? model.Particulars : (!string.IsNullOrWhiteSpace(model.Particular1) ? model.Particular1 : $"Bill Type Transfer {model.LeftBillType} to {model.RightBillType}");
 
                 string leftName = !string.IsNullOrWhiteSpace(model.LeftBillType) ? model.LeftBillType : "Major Repair";
                 string rightName = !string.IsNullOrWhiteSpace(model.RightBillType) ? model.RightBillType : "Maintenance";
                 string leftType = !string.IsNullOrWhiteSpace(model.LeftType) ? model.LeftType : "Dr";
                 string rightType = !string.IsNullOrWhiteSpace(model.RightType) ? model.RightType : "Cr";
-                string flatNo = !string.IsNullOrWhiteSpace(model.FlatNo) ? model.FlatNo : "";
                 string part2 = !string.IsNullOrWhiteSpace(model.Particular2) ? model.Particular2 : "Approved by Society";
 
-                string metaRef = $"{leftName}|{leftType}|{rightName}|{rightType}|{flatNo}|{part2}";
+                string metaRef = $"{leftName}|{leftType}|{rightName}|{rightType}|{flatNo}|{part2}|{m1Id}|{m2Id}|{memberCode}|{member2Code}|{member2Flat}|{member2Name}";
+
+                var personNameFormatted = (m1Id != m2Id || (!string.IsNullOrWhiteSpace(member2Name) && !member2Name.Equals(memberName, StringComparison.OrdinalIgnoreCase)))
+                    ? $"[{memberCode}] {memberName} ({flatNo}) -> [{member2Code}] {member2Name} ({member2Flat})"
+                    : (!string.IsNullOrWhiteSpace(memberCode) ? $"[{memberCode}] {memberName} ({flatNo})" : (!string.IsNullOrWhiteSpace(flatNo) ? $"{memberName} ({flatNo})" : memberName));
+
+                var memCodeVal = !string.IsNullOrWhiteSpace(memberCode)
+                    ? memberCode
+                    : (m1Id > 0 ? m1Id.ToString() : (flatNo ?? ""));
+
+                string p1Text = $"[Transfer: {memberName} ({leftName}) -> {member2Name} ({rightName})]";
+                string p2Text = $"M1:{m1Id}:{memberCode} ({leftName} {leftType}) -> M2:{m2Id}:{member2Code} ({rightName} {rightType}) | {part2}";
 
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
 
+                int resolvedVoucherId = 0;
                 if (int.TryParse(id, out int numId))
                 {
+                    resolvedVoucherId = numId;
                     cmd.CommandText = @"
                         UPDATE jeevika_erp.SocVoucherHeader
                         SET Amount = @amt, PersonName = @person, PersonCode = @pcode, RefNo = @ref, 
                             Particular1 = @p1, Particular2 = @p2, Narration = @narr,
                             VoucherDate = @vdate, UpdatedAt = NOW()
-                        WHERE (VoucherId = @numId OR VoucherNo = @id) AND IsDeleted = FALSE";
+                        WHERE (VoucherId = @numId OR VoucherNo = @id) AND IsDeleted = FALSE
+                        RETURNING VoucherId";
                     cmd.Parameters.AddWithValue("@numId",  numId);
                     cmd.Parameters.AddWithValue("@id",     id);
                 }
@@ -334,28 +407,91 @@ namespace JeevikaERP.Controllers
                         SET Amount = @amt, PersonName = @person, PersonCode = @pcode, RefNo = @ref, 
                             Particular1 = @p1, Particular2 = @p2, Narration = @narr,
                             VoucherDate = @vdate, UpdatedAt = NOW()
-                        WHERE VoucherNo = @id AND IsDeleted = FALSE";
+                        WHERE VoucherNo = @id AND IsDeleted = FALSE
+                        RETURNING VoucherId";
                     cmd.Parameters.AddWithValue("@id", id);
                 }
-
-                var personNameFormatted = !string.IsNullOrWhiteSpace(model.MemberCode)
-                    ? $"[{model.MemberCode}] {memberName} ({model.FlatNo})"
-                    : (!string.IsNullOrWhiteSpace(model.FlatNo) ? $"{memberName} ({model.FlatNo})" : memberName);
-
-                var memCodeVal = !string.IsNullOrWhiteSpace(model.MemberCode)
-                    ? model.MemberCode.Trim()
-                    : (model.MemberId > 0 ? model.MemberId.ToString() : (model.FlatNo ?? ""));
 
                 cmd.Parameters.AddWithValue("@amt",    model.Amount);
                 cmd.Parameters.AddWithValue("@person", personNameFormatted);
                 cmd.Parameters.AddWithValue("@pcode",  memCodeVal);
                 cmd.Parameters.AddWithValue("@ref",    metaRef);
-                cmd.Parameters.AddWithValue("@p1",     $"[Transfer: {leftName} to {rightName}]");
-                cmd.Parameters.AddWithValue("@p2",     $"Trf: {leftName} ({leftType}) -> {rightName} ({rightType})");
+                cmd.Parameters.AddWithValue("@p1",     p1Text);
+                cmd.Parameters.AddWithValue("@p2",     p2Text);
                 cmd.Parameters.AddWithValue("@narr",   narration);
                 cmd.Parameters.AddWithValue("@vdate",  model.TransferDate != default ? model.TransferDate : (model.TrfDate != default ? model.TrfDate : DateTime.Today));
 
-                cmd.ExecuteNonQuery();
+                var scalarRes = cmd.ExecuteScalar();
+                if (scalarRes != null && scalarRes != DBNull.Value) resolvedVoucherId = Convert.ToInt32(scalarRes);
+
+                // Update detail lines as well
+                if (resolvedVoucherId > 0)
+                {
+                    using var delDtl = conn.CreateCommand();
+                    delDtl.Transaction = tx;
+                    delDtl.CommandText = "DELETE FROM jeevika_erp.SocVoucherDetail WHERE VoucherId = @vid";
+                    delDtl.Parameters.AddWithValue("@vid", resolvedVoucherId);
+                    delDtl.ExecuteNonQuery();
+
+                    int duesAccId = 0;
+                    string duesCode = "ASS-1025";
+                    string duesName = "Dues From Members";
+                    using (var accCmd = conn.CreateCommand())
+                    {
+                        accCmd.Transaction = tx;
+                        accCmd.CommandText = "SELECT AccountId, AccCode, AccName FROM jeevika_erp.SocAccount WHERE SocietyId = @sid AND (AccCode = 'ASS-1025' OR AccName ILIKE 'Dues From Members%') AND IsDeleted = FALSE LIMIT 1";
+                        accCmd.Parameters.AddWithValue("@sid", model.SocietyId);
+                        using var rA = accCmd.ExecuteReader();
+                        if (rA.Read())
+                        {
+                            duesAccId = Convert.ToInt32(rA["AccountId"]);
+                            duesCode  = rA["AccCode"]?.ToString() ?? "ASS-1025";
+                            duesName  = rA["AccName"]?.ToString() ?? "Dues From Members";
+                        }
+                    }
+
+                    if (duesAccId > 0)
+                    {
+                        decimal d1Amt = leftType.Equals("Dr", StringComparison.OrdinalIgnoreCase) ? model.Amount : 0m;
+                        decimal c1Amt = leftType.Equals("Cr", StringComparison.OrdinalIgnoreCase) ? model.Amount : (d1Amt == 0 ? model.Amount : 0m);
+
+                        decimal d2Amt = rightType.Equals("Dr", StringComparison.OrdinalIgnoreCase) ? model.Amount : (c1Amt > 0 && leftType != rightType ? model.Amount : 0m);
+                        decimal c2Amt = rightType.Equals("Cr", StringComparison.OrdinalIgnoreCase) ? model.Amount : (d2Amt == 0 ? model.Amount : 0m);
+
+                        using var d1Cmd = conn.CreateCommand();
+                        d1Cmd.Transaction = tx;
+                        d1Cmd.CommandText = @"
+                            INSERT INTO jeevika_erp.SocVoucherDetail
+                                (VoucherId, SrNo, AccountId, AccountCode, AccountName, Debit, Credit, Narration)
+                            VALUES
+                                (@vid, 1, @aid, @code, @name, @dr, @cr, @narr)";
+                        d1Cmd.Parameters.AddWithValue("@vid",   resolvedVoucherId);
+                        d1Cmd.Parameters.AddWithValue("@aid",   duesAccId);
+                        d1Cmd.Parameters.AddWithValue("@code",  duesCode);
+                        d1Cmd.Parameters.AddWithValue("@name",  $"{duesName} [{leftName}]");
+                        d1Cmd.Parameters.AddWithValue("@dr",    d1Amt);
+                        d1Cmd.Parameters.AddWithValue("@cr",    c1Amt);
+                        d1Cmd.Parameters.AddWithValue("@narr",  $"Transfer ({leftType}) {leftName} for {memberName} ({flatNo}) to {member2Name}");
+                        d1Cmd.ExecuteNonQuery();
+
+                        using var d2Cmd = conn.CreateCommand();
+                        d2Cmd.Transaction = tx;
+                        d2Cmd.CommandText = @"
+                            INSERT INTO jeevika_erp.SocVoucherDetail
+                                (VoucherId, SrNo, AccountId, AccountCode, AccountName, Debit, Credit, Narration)
+                            VALUES
+                                (@vid, 2, @aid, @code, @name, @dr, @cr, @narr)";
+                        d2Cmd.Parameters.AddWithValue("@vid",   resolvedVoucherId);
+                        d2Cmd.Parameters.AddWithValue("@aid",   duesAccId);
+                        d2Cmd.Parameters.AddWithValue("@code",  duesCode);
+                        d2Cmd.Parameters.AddWithValue("@name",  $"{duesName} [{rightName}]");
+                        d2Cmd.Parameters.AddWithValue("@dr",    d2Amt);
+                        d2Cmd.Parameters.AddWithValue("@cr",    c2Amt);
+                        d2Cmd.Parameters.AddWithValue("@narr",  $"Transfer ({rightType}) {rightName} for {member2Name} ({member2Flat}) from {memberName}");
+                        d2Cmd.ExecuteNonQuery();
+                    }
+                }
+
                 tx.Commit();
 
                 return Ok(new { success = true, message = "Bill Type Transfer updated successfully." });
@@ -474,12 +610,18 @@ namespace JeevikaERP.Controllers
         public DateTime TrfDate       { get; set; } = DateTime.Today;
         public decimal  Amount        { get; set; } = 0;
         public int      MemberId      { get; set; } = 0;
+        public int      Member1Id     { get; set; } = 0;
+        public int      Member2Id     { get; set; } = 0;
         public string?  MemberName    { get; set; }
         public string?  MemName       { get; set; }
         public string?  MemberCode    { get; set; }
         public string?  MemCode       { get; set; }
         public string?  Member1Name   { get; set; }
         public string?  Member2Name   { get; set; }
+        public string?  Member1Code   { get; set; }
+        public string?  Member2Code   { get; set; }
+        public string?  Member1Flat   { get; set; }
+        public string?  Member2Flat   { get; set; }
         public string?  LeftBillType  { get; set; }
         public string?  RightBillType { get; set; }
         public string?  TransType     { get; set; }

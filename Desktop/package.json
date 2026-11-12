@@ -1,8 +1,13 @@
 {
-  "name": "jeevika-erp-desktop",
+  "name": "henu-erp",
   "version": "2.0.0",
-  "description": "JEEVIKA ERP 2.0 - Secure Desktop Host",
+  "description": "HENU ERP - Society Accounting & Management System",
   "main": "src/main/main.js",
+  "author": {
+    "name": "HENU OS PRIVATE LIMITED",
+    "url": "http://www.henuos.in"
+  },
+  "homepage": "http://www.henuos.in",
   "scripts": {
     "start": "electron src/main/main.js",
     "dev": "electron src/main/main.js --dev",
@@ -10,23 +15,36 @@
     "test:e2e": "node scripts/test-e2e-scenarios.js",
     "dist": "electron-builder --win"
   },
-  "author": "HENU OS PRIVATE LIMITED",
   "license": "UNLICENSED",
   "devDependencies": {
     "electron": "^44.4.3",
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "com.henuos.jeevikaerp",
-    "productName": "JEEVIKA ERP 2.0",
+    "appId": "in.henuos.erp",
+    "productName": "HENU ERP",
+    "copyright": "Copyright © 2026 HENU OS PRIVATE LIMITED",
     "directories": {
-      "output": "dist"
+      "output": "D:\\jeevika_erp_v2\\Relese2026"
     },
     "files": [
       "src/**/*",
+      "icon.ico",
+      "icon.png",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend"
+      },
+      {
+        "from": "resources/webapp",
+        "to": "webapp"
+      }
+    ],
     "win": {
+      "icon": "icon.ico",
       "signExecutable": false,
       "target": [
         {
@@ -42,7 +60,14 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false
+      "shortcutName": "HENU ERP",
+      "artifactName": "henuerp_setup.exe",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "perMachine": false,
+      "runAfterFinish": true
     }
   }
 }

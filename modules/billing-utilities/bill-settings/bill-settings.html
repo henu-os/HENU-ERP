@@ -3,45 +3,137 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bill Calculation Settings — JEEVIKA ERP</title>
+  <title>Billing Calculation & Late Fee Rules — Billing Utilities</title>
   <script src="../../../config.js"></script>
   <link rel="stylesheet" href="../../../assets/css/global.css">
   <link rel="stylesheet" href="../../../assets/css/components.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .bu-header {
+      background: #1e3a8a;
+      color: #fff;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .bu-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 16px;
+    }
+    .bu-card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 8px;
+    }
+    .bu-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .bu-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: block;
+    }
+  </style>
 </head>
-<body class="erp-module">
-  <div class="erp-module-header">
+<body class="erp-module" style="display:flex; flex-direction:column; height:100vh; overflow:hidden; background:#f8fafc;">
+
+  <!-- Header -->
+  <header class="bu-header">
     <div>
-      <div class="erp-module-title">Bill Calculation Settings</div>
-      
+      <div style="font-size:16px; font-weight:800; letter-spacing:0.3px;">
+        <i class="bi bi-gear-wide-connected text-warning me-2"></i>BILLING CALCULATION &amp; LATE FEE RULES
+      </div>
+      <div style="font-size:11px; color:#bfdbfe; margin-top:2px;">
+        Statutory parameters for overdue simple interest (Bye-Law 68) &amp; GST exemption limits
+      </div>
     </div>
-    <button class="erp-btn erp-btn-primary" onclick="refreshData()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-  </div>
+    <div style="display:flex; gap:8px;">
+      <button class="erp-btn" onclick="saveSettings()" style="background:#059669; color:#fff; border:none;">
+        <i class="bi bi-check2-circle"></i> Save Settings
+      </button>
+      <button class="erp-btn" onclick="loadSettings()" style="background:#475569; color:#fff; border:none;">
+        <i class="bi bi-arrow-clockwise"></i> Reset
+      </button>
+    </div>
+  </header>
 
-  <div class="erp-search-bar">
-    <input type="text" id="searchInput" class="erp-input erp-search-input" placeholder="🔍 Search..." onkeyup="filterTable()">
-    <div class="erp-record-count" id="recordCount">Total: 0</div>
-  </div>
+  <!-- Body Content -->
+  <div style="flex:1; overflow:auto; padding:18px;">
+    <div style="max-width:960px; margin:0 auto;">
 
-  <div class="erp-module-body" style="padding:0;">
-    <div class="erp-table-container" style="height:100%;border:none;">
-      <table class="erp-table striped" id="mainTable">
-        <thead>
-          <tr>
-            <th style="width:40px;" class="td-center">#</th>
-            <th>Particulars / Description</th>
-            <th style="width:120px;" class="td-center">Reference</th>
-            <th style="width:120px;" class="td-center">Status</th>
-          </tr>
-        </thead>
-        <tbody id="mainTableBody">
-          <tr>
-            <td colspan="4" class="text-center text-muted" style="padding:30px;">
-              Module initialized. Live data will be loaded here.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <!-- Card 1: Bye-Law 68 Interest Rule -->
+      <div class="bu-card">
+        <div class="bu-card-title">
+          <i class="bi bi-percent text-danger"></i> Overdue Simple Interest Setup (Model Bye-Law No. 68)
+        </div>
+        <div class="bu-grid-2">
+          <div>
+            <label class="bu-label">Simple Interest Rate (% p.a.)</label>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="number" id="interestRate" class="erp-input" value="21" min="0" max="21" step="0.5" style="width:120px;">
+              <span style="font-size:11px; color:#dc2626; font-weight:700;">Cap: Maximum 21% p.a. (Strictly Simple Interest)</span>
+            </div>
+          </div>
+          <div>
+            <label class="bu-label">Interest Calculation Method</label>
+            <select id="interestCalcMode" class="erp-input">
+              <option value="AUTO" selected>Auto Calculate on Overdue Principal</option>
+              <option value="MANUAL">Manual Entry / Waiver Mode</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="bu-grid-2" style="margin-top:14px;">
+          <div>
+            <label class="bu-label">Grace Period (Days from Bill Date)</label>
+            <input type="number" id="gracePeriodDays" class="erp-input" value="15" min="0" max="60">
+            <div style="font-size:10px; color:#64748b; margin-top:3px;">No interest is charged if paid on or before due date.</div>
+          </div>
+          <div>
+            <label class="bu-label">Minimum Interest Threshold (₹)</label>
+            <input type="number" id="minInterestThreshold" class="erp-input" value="25" min="0" max="500">
+            <div style="font-size:10px; color:#64748b; margin-top:3px;">Waive interest amount if calculated value is below this amount.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: GST Exemption Setup -->
+      <div class="bu-card">
+        <div class="bu-card-title">
+          <i class="bi bi-receipt-cutoff text-primary"></i> GST Exemption &amp; Tax Engine (Notification 12/2017)
+        </div>
+        <div class="bu-grid-2">
+          <div>
+            <label class="bu-label">Monthly Exemption Threshold (₹)</label>
+            <input type="number" id="gstThreshold" class="erp-input" value="7500" readonly style="background:#f1f5f9;">
+            <div style="font-size:10px; color:#16a34a; font-weight:700; margin-top:3px;">Statutory limit: ₹7,500/Month per residential member</div>
+          </div>
+          <div>
+            <label class="bu-label">GST Tax Calculation Mode</label>
+            <select id="gstCalcMode" class="erp-input">
+              <option value="AUTO" selected>Auto 18% (9% CGST + 9% SGST) if Maintenance > ₹7,500</option>
+              <option value="MANUAL">Manual Control</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 

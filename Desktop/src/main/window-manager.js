@@ -21,6 +21,7 @@ let mainWindow = null;
 function createMainWindow(config) {
   mainWindow = new BrowserWindow({
     ...constants.WINDOW_CONFIG,
+    icon: config.appIconPath,
     webPreferences: {
       preload: config.preloadScriptPath,
       contextIsolation: true,
@@ -77,7 +78,7 @@ function loadErrorScreen(window, reason, targetUrl) {
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>JEEVIKA ERP — Startup Error</title>
+      <title>HENU ERP — Startup Diagnostic</title>
       <style>
         * { box-sizing: border-box; }
         body {
@@ -139,16 +140,24 @@ function loadErrorScreen(window, reason, targetUrl) {
           transition: background 0.2s;
         }
         .btn:hover { background: #1D4ED8; }
+        .footer {
+          margin-top: 20px;
+          font-size: 12px;
+          color: #64748B;
+        }
       </style>
     </head>
     <body>
       <div class="card">
         <div class="icon">!</div>
-        <h1>Backend Initialization Failed</h1>
-        <p>JEEVIKA ERP Desktop Host was unable to establish a connection to the local API service.</p>
+        <h1>Backend Initialization Notice</h1>
+        <p>HENU ERP Desktop Host was unable to establish a connection to the local API service.</p>
         <div class="details">Target: ${targetUrl}<br>Reason: ${reason}</div>
-        <p>Ensure that .NET 8 runtime is installed, no port conflicts exist on port 5002, and your database service is running.</p>
+        <p>Ensure port 5002 is not blocked by another application.</p>
         <button class="btn" onclick="location.reload()">Retry Connection</button>
+        <div class="footer">
+          Created & Developed By HENU OS PRIVATE LIMITED &bull; <a href="http://www.henuos.in" style="color:#38BDF8;text-decoration:none;">www.henuos.in</a>
+        </div>
       </div>
     </body>
     </html>

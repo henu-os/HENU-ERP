@@ -2757,4 +2757,247 @@ if (typeof window !== 'undefined') {
   window.applyFYDateRestrictions = applyFYDateRestrictions;
 }
 
+// ═══════════════════════════════════════════════════════════
+// REPORT DYNAMIC FOOTER & SIGNATORY HELPER
+// Zero-hardcoding: pulls dynamic 6-line footers from
+// Configuration & Notes Master with live Left/Right toggle
+// for Screen, PDF/Print, and Excel (.xlsx) across all Account Reports.
+// ═══════════════════════════════════════════════════════════
+const ReportFooterHelper = (() => {
+
+  function getActiveSocietyId() {
+    return (window.Auth && Auth.getSocietyId && Auth.getSocietyId() !== '—')
+      ? Auth.getSocietyId()
+      : (sessionStorage.getItem('activeSocietyId') || localStorage.getItem('activeSocietyId') || '1');
+  }
+
+  function getConfig() {
+    try {
+      const sid = getActiveSocietyId();
+      const raw = localStorage.getItem('jeevika_config_notes_' + sid) || localStorage.getItem('jeevika_config_notes_global');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.warn('[ReportFooterHelper] Could not read config:', e);
+    }
+    return {};
+  }
+
+  function isSwapped(reportKey) {
+    const sid = getActiveSocietyId();
+    const k = 'jeevika_report_footer_swap_' + sid + '_' + (reportKey || 'default');
+    const local = localStorage.getItem(k);
+    if (local !== null) return local === 'true';
+
+    // Check if Configuration & Notes Master has a global preference
+    const cfg = getConfig();
+    if (cfg.bsSignatoryRight !== undefined) {
+      return !cfg.bsSignatoryRight;
+    }
+    return false;
+  }
+
+  function setSwapped(reportKey, val) {
+    const sid = getActiveSocietyId();
+    const k = 'jeevika_report_footer_swap_' + sid + '_' + (reportKey || 'default');
+    localStorage.setItem(k, val ? 'true' : 'false');
+  }
+
+  function toggle(reportKey) {
+    const next = !isSwapped(reportKey);
+    setSwapped(reportKey, next);
+    return next;
+  }
+
+  function getFooterBlocks(activeSocName, dateStr) {
+    const cfg = getConfig();
+    const soc = activeSocName || (window.Auth && Auth.getSocietyName ? Auth.getSocietyName() : '') || 'CO-OPERATIVE HOUSING SOCIETY LTD.';
+
+    // Management Footer Lines (6 lines from Configuration & Notes Master)
+    let genLines = [];
+    if (Array.isArray(cfg.genFooters) && cfg.genFooters.some(l => l && String(l).trim())) {
+      genLines = cfg.genFooters.map(l => (l || '').trim());
+    } else {
+      // Dynamic fallback based on society & officers configured
+      const chName = cfg.chairman || (window.Auth && Auth.getChairmanName ? Auth.getChairmanName() : '');
+      const secName = cfg.secretary || '';
+      genLines = [
+        `For ${soc}`,
+        dateStr ? `Date: ${dateStr}` : '',
+        '',
+        chName ? `(Chairman: ${chName})` : '(Chairman)',
+        secName ? `(Secretary: ${secName})` : '(Secretary)',
+        '(Treasurer)'
+      ];
+    }
+
+    // Auditor Disclaimer Footer Lines (6 lines from Configuration & Notes Master)
+    let audLines = [];
+    if (Array.isArray(cfg.audFooters) && cfg.audFooters.some(l => l && String(l).trim())) {
+      audLines = cfg.audFooters.map(l => (l || '').trim());
+    } else {
+      // Dynamic fallback for Auditor attestation
+      audLines = [
+        'For: (C/A)',
+        dateStr ? `Date: ${dateStr}` : '',
+        '',
+        '(Proprietor / Auditor)',
+        'Chartered Accountants',
+        ''
+      ];
+    }
+
+    return { genLines, audLines };
+  }
+
+  function renderHtml(reportKey, activeSocName, dateStr) {
+    const swapped = isSwapped(reportKey);
+    const { genLines, audLines } = getFooterBlocks(activeSocName, dateStr);
+
+    // Normal: Management on Left, Auditor on Right
+    // Swapped: Auditor on Left, Management on Right
+    const leftLines = swapped ? audLines : genLines;
+    const rightLines = swapped ? genLines : audLines;
+
+    const renderCol = (lines, align) => {
+      // Filter trailing empty lines to keep clean layout
+      return lines.map(line => {
+        if (!line || !line.trim()) {
+          return '<div style="min-height:16px;">&nbsp;</div>';
+        }
+        return `<div style="font-weight:700; font-size:11px; line-height:1.5; color:#1e293b; text-align:${align};">${typeof escHtml === 'function' ? escHtml(line) : line}</div>`;
+      }).join('');
+    };
+
+    return `
+      <div class="report-dynamic-footer-wrap" style="margin-top:20px; padding-top:14px; border-top:1px solid #cbd5e1; display:flex; justify-content:space-between; align-items:flex-start; width:100%; box-sizing:border-box;">
+        <div class="report-dynamic-col-left" style="flex:1; max-width:48%; text-align:left;">
+          ${renderCol(leftLines, 'left')}
+        </div>
+        <div class="report-dynamic-col-right" style="flex:1; max-width:48%; text-align:right;">
+          ${renderCol(rightLines, 'right')}
+        </div>
+      </div>
+    `;
+  }
+
+  function appendToXlsx(ws, rStart, reportKey, activeSocName, dateStr, setCellFn, mergesArr, maxCol = 7) {
+    const swapped = isSwapped(reportKey);
+    const { genLines, audLines } = getFooterBlocks(activeSocName, dateStr);
+
+    const leftLines = swapped ? audLines : genLines;
+    const rightLines = swapped ? genLines : audLines;
+
+    const maxLines = Math.max(leftLines.length, rightLines.length);
+    const halfCol = Math.floor(maxCol / 2);
+
+    for (let i = 0; i < maxLines; i++) {
+      const lText = leftLines[i] || '';
+      const rText = rightLines[i] || '';
+      const r = rStart + i;
+
+      if (typeof setCellFn === 'function') {
+        if (lText) {
+          setCellFn(r, 0, lText, 's', {
+            font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
+            alignment: { horizontal: 'left', vertical: 'center' }
+          });
+          if (mergesArr && halfCol > 1) {
+            mergesArr.push({ s: { r: r, c: 0 }, e: { r: r, c: halfCol - 1 } });
+          }
+        }
+        if (rText) {
+          setCellFn(r, halfCol, rText, 's', {
+            font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1a1a1a' } },
+            alignment: { horizontal: 'right', vertical: 'center' }
+          });
+          if (mergesArr && maxCol > halfCol) {
+            mergesArr.push({ s: { r: r, c: halfCol }, e: { r: r, c: maxCol } });
+          }
+        }
+      } else if (ws) {
+        const targetMerges = mergesArr || ws['!merges'];
+        if (lText) {
+          const cL = XLSX.utils.encode_cell({ r: r, c: 0 });
+          ws[cL] = {
+            t: 's',
+            v: lText,
+            s: {
+              font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1A1A1A' } },
+              alignment: { horizontal: 'left', vertical: 'center' }
+            }
+          };
+          if (targetMerges && halfCol > 1) {
+            targetMerges.push({ s: { r: r, c: 0 }, e: { r: r, c: halfCol - 1 } });
+          }
+        }
+        if (rText) {
+          const cR = XLSX.utils.encode_cell({ r: r, c: halfCol });
+          ws[cR] = {
+            t: 's',
+            v: rText,
+            s: {
+              font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '1A1A1A' } },
+              alignment: { horizontal: 'right', vertical: 'center' }
+            }
+          };
+          if (targetMerges && maxCol > halfCol) {
+            targetMerges.push({ s: { r: r, c: halfCol }, e: { r: r, c: maxCol } });
+          }
+        }
+      }
+    }
+
+    if (ws && typeof XLSX !== 'undefined' && XLSX.utils && XLSX.utils.decode_range && XLSX.utils.encode_range) {
+      try {
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:H1');
+        range.e.r = Math.max(range.e.r, rStart + maxLines);
+        range.e.c = Math.max(range.e.c, maxCol);
+        ws['!ref'] = XLSX.utils.encode_range(range);
+      } catch (_) {}
+    }
+
+    return rStart + maxLines;
+  }
+
+  function appendToCsv(csvRows, reportKey, activeSocName, dateStr, totalCols = 4) {
+    const swapped = isSwapped(reportKey);
+    const { genLines, audLines } = getFooterBlocks(activeSocName, dateStr);
+
+    const leftLines = swapped ? audLines : genLines;
+    const rightLines = swapped ? genLines : audLines;
+    const maxLines = Math.max(leftLines.length, rightLines.length);
+
+    csvRows.push('');
+    csvRows.push('');
+
+    const midCol = Math.max(1, Math.floor(totalCols / 2));
+
+    for (let i = 0; i < maxLines; i++) {
+      const lText = (leftLines[i] || '').replace(/"/g, '""');
+      const rText = (rightLines[i] || '').replace(/"/g, '""');
+
+      const row = new Array(totalCols).fill('""');
+      row[0] = `"${lText}"`;
+      row[midCol] = `"${rText}"`;
+      csvRows.push(row.join(','));
+    }
+  }
+
+  return {
+    getConfig,
+    isSwapped,
+    setSwapped,
+    toggle,
+    getFooterBlocks,
+    renderHtml,
+    appendToXlsx,
+    appendToCsv
+  };
+})();
+
+if (typeof window !== 'undefined') {
+  window.ReportFooterHelper = ReportFooterHelper;
+}
+
+
 

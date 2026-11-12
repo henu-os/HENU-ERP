@@ -3,41 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Overdue Interest Calculator — JEEVIKA ERP</title>
+  <title>Overdue Interest Calculator — Model Bye-Law No. 68</title>
   <script src="../../../config.js"></script>
   <link rel="stylesheet" href="../../../assets/css/global.css">
   <link rel="stylesheet" href="../../../assets/css/components.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .bu-header {
+      background: #b45309;
+      color: #fff;
+      padding: 12px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .bu-calc-box {
+      background: #fff;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+    }
+    .bu-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #78350f;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .stat-table th {
+      background: #0f172a !important;
+      color: #ffffff !important;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      text-align: center;
+      vertical-align: middle;
+      border: 1px solid #334155;
+      padding: 7px 6px;
+    }
+    .stat-table td {
+      font-size: 11.5px;
+      padding: 7px 8px;
+      border: 1px solid #cbd5e1;
+      vertical-align: middle;
+    }
+  </style>
 </head>
-<body class="erp-module">
-  <div class="erp-module-header">
+<body class="erp-module" style="display:flex; flex-direction:column; height:100vh; overflow:hidden; background:#f8fafc;">
+
+  <!-- Header -->
+  <header class="bu-header">
     <div>
-      <div class="erp-module-title">Overdue Interest Calculator</div>
-      
+      <div style="font-size:16px; font-weight:800; letter-spacing:0.3px;">
+        <i class="bi bi-calculator-fill text-warning me-2"></i>OVERDUE INTEREST CALCULATOR (BYE-LAW NO. 68)
+      </div>
+      <div style="font-size:11px; color:#fef3c7; margin-top:2px;">
+        Strict Simple Interest Engine: P &times; R &times; T &divide; 36,500 (Capped at 21% p.a.)
+      </div>
     </div>
-    <button class="erp-btn erp-btn-primary" onclick="refreshData()"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+    <div style="display:flex; gap:8px;">
+      <button class="erp-btn" onclick="exportToExcel()" style="background:#059669; color:#fff; border:none;">
+        <i class="bi bi-file-earmark-excel"></i> Export Excel
+      </button>
+      <button class="erp-btn" onclick="window.print()" style="background:#0284c7; color:#fff; border:none;">
+        <i class="bi bi-printer"></i> Print Statement
+      </button>
+      <button class="erp-btn" onclick="loadBulkCalculation()" style="background:#475569; color:#fff; border:none;">
+        <i class="bi bi-arrow-clockwise"></i> Recalculate All
+      </button>
+    </div>
+  </header>
+
+  <!-- Interactive Parameter Control -->
+  <div style="padding:14px 18px 0 18px;">
+    <div class="bu-calc-box">
+      <div>
+        <label class="bu-label">Interest Rate (% p.a.)</label>
+        <input type="number" id="calcRate" class="erp-input" value="21" min="1" max="21" style="width:110px;">
+      </div>
+      <div>
+        <label class="bu-label">Grace Period (Days)</label>
+        <input type="number" id="calcGrace" class="erp-input" value="15" min="0" max="60" style="width:110px;">
+      </div>
+      <div>
+        <label class="bu-label">Calculation As On Date</label>
+        <input type="date" id="calcAsOn" class="erp-input" style="width:150px;">
+      </div>
+      <div>
+        <button class="erp-btn" onclick="loadBulkCalculation()" style="background:#b45309; color:#fff; border:none; height:35px; padding:0 16px;">
+          <i class="bi bi-lightning-fill"></i> Compute Interest Across All Flats
+        </button>
+      </div>
+      <div style="margin-left:auto; text-align:right;">
+        <div style="font-size:10px; font-weight:700; color:#78350f; text-transform:uppercase;">Total Computed Interest</div>
+        <div style="font-size:18px; font-weight:800; color:#b45309;" id="sumTotalInterest">₹0.00</div>
+      </div>
+    </div>
   </div>
 
-  <div class="erp-search-bar">
-    <input type="text" id="searchInput" class="erp-input erp-search-input" placeholder="🔍 Search..." onkeyup="filterTable()">
-    <div class="erp-record-count" id="recordCount">Total: 0</div>
+  <!-- Search Filter -->
+  <div style="padding:0 18px 8px 18px; display:flex; gap:12px; align-items:center;">
+    <input type="text" id="searchInput" class="erp-input" placeholder="🔍 Search member name, flat..." onkeyup="filterTable()" style="max-width:300px;">
+    <div style="margin-left:auto; font-size:11px; font-weight:700; color:#b45309;" id="recordCount">
+      Total Flats: 0
+    </div>
   </div>
 
-  <div class="erp-module-body" style="padding:0;">
-    <div class="erp-table-container" style="height:100%;border:none;">
-      <table class="erp-table striped" id="mainTable">
+  <!-- Table Viewport -->
+  <div style="flex:1; overflow:auto; padding:0 18px 14px 18px;">
+    <div style="background:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.1); overflow:hidden;">
+      <table class="erp-table stat-table" id="mainTable" style="width:100%; border-collapse:collapse;">
         <thead>
           <tr>
-            <th style="width:40px;" class="td-center">#</th>
-            <th>Particulars / Description</th>
-            <th style="width:120px;" class="td-center">Reference</th>
-            <th style="width:120px;" class="td-center">Status</th>
+            <th style="width:35px;">#</th>
+            <th style="width:75px;">Flat No</th>
+            <th>Member Full Name</th>
+            <th style="width:85px;">Member Code</th>
+            <th style="width:120px;">Overdue Principal (₹)</th>
+            <th style="width:90px;">Days Overdue</th>
+            <th style="width:75px;">Rate (% p.a.)</th>
+            <th style="width:120px;">Simple Interest (₹)</th>
+            <th style="width:130px;">Total Due Payable (₹)</th>
+            <th style="width:110px;">Bye-Law Status</th>
           </tr>
         </thead>
         <tbody id="mainTableBody">
           <tr>
-            <td colspan="4" class="text-center text-muted" style="padding:30px;">
-              Module initialized. Live data will be loaded here.
+            <td colspan="10" class="text-center text-muted" style="padding:40px;">
+              <div class="erp-spinner"></div> Computing overdue interest under Bye-Law 68...
             </td>
           </tr>
         </tbody>

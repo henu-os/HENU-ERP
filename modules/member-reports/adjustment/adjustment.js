@@ -155,7 +155,7 @@
 
           <!-- Title Bar -->
           <div class="adj-title-bar">
-            <div class="adj-doc-title">ADJUSTMENT / TRANSFER VOUCHER</div>
+            <div class="adj-doc-title">MEMBER REVERSAL RECEIPT VOUCHER</div>
             <div>Date: <strong>${HenuOsReportEngine.formatDate(v.date || v.voucherDate)}</strong></div>
           </div>
 

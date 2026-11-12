@@ -511,6 +511,11 @@ function renderTfoot(isAll) {
 }
 
 function renderTable(list) {
+  const chkSwap = document.getElementById('chk-swap-footer');
+  if (chkSwap && window.ReportFooterHelper) {
+    chkSwap.checked = window.ReportFooterHelper.isSwapped('dues-advance');
+  }
+
   const tbody = document.getElementById('mainTableBody');
   const selectedBT = (document.getElementById('billTypeSelect')?.value || 'Maintenance').trim();
   const isAll = (selectedBT.toUpperCase() === 'ALL');
@@ -560,7 +565,27 @@ function renderTable(list) {
   }).join('');
 
   updateKPIs(list, totOpDues, totOpAdv, totDr, totCr, totClDues, totClAdv);
+  renderDADynamicFooters();
 }
+
+function renderDADynamicFooters() {
+  const footWrap = document.getElementById('da-dynamic-footer-wrap');
+  if (!footWrap) return;
+  if (window.ReportFooterHelper) {
+    const socName = (window.Auth && Auth.getSocietyName && Auth.getSocietyName() !== '—') ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'CO-OPERATIVE HOUSING SOCIETY LTD.');
+    const toDate = document.getElementById('toDate')?.value || '';
+    footWrap.innerHTML = window.ReportFooterHelper.renderHtml('dues-advance', socName, toDate);
+  }
+}
+
+window.toggleDAFooterSwap = function () {
+  if (window.ReportFooterHelper) {
+    const swapped = window.ReportFooterHelper.toggle('dues-advance');
+    const chk = document.getElementById('chk-swap-footer');
+    if (chk) chk.checked = swapped;
+  }
+  renderDADynamicFooters();
+};
 
 function updateKPIs(list, opDues, opAdv, dr, cr, clDues, clAdv) {
   const memCountText = `${list.length} Members`;
@@ -668,6 +693,14 @@ function exportCsv() {
         ];
     csvRows.push(row.join(','));
   });
+
+  // Dynamic footers from Configuration & Notes Master
+  if (window.ReportFooterHelper) {
+    const socName = (window.Auth && Auth.getSocietyName && Auth.getSocietyName() !== '—') ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'CO-OPERATIVE HOUSING SOCIETY LTD.');
+    const toDate = document.getElementById('toDate')?.value || '';
+    const totalCols = isAll ? 11 : 10;
+    ReportFooterHelper.appendToCsv(csvRows, 'dues-advance', socName, toDate, totalCols);
+  }
 
   const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

@@ -242,7 +242,7 @@ namespace JeevikaERP.Controllers
         public IActionResult GetReceipts([FromQuery] int societyId = 0, [FromQuery] int fyId = 0)
         {
             if (societyId <= 0)
-                societyId = 4;
+                return BadRequest(new { success = false, message = "societyId is required." });
 
             try
             {
@@ -260,7 +260,7 @@ namespace JeevikaERP.Controllers
                         FROM jeevika_erp.SocVoucherHeader vh
                         LEFT JOIN jeevika_erp.SocMember m 
                                ON (vh.PersonCode = m.MemCode OR vh.PersonCode = CAST(m.MemberId AS VARCHAR) OR vh.RefNo = m.MemCode)
-                              AND (m.SocietyId = vh.SocietyId OR m.SocietyId = 1) AND m.IsDeleted = FALSE
+                              AND m.SocietyId = vh.SocietyId AND m.IsDeleted = FALSE
                         WHERE vh.SocietyId = @sid AND vh.FYId = @fyid AND vh.VoucherType = 'MemberReceipt' AND vh.IsDeleted = FALSE
                         ORDER BY vh.VoucherDate DESC, vh.VoucherId DESC";
                     cmd.Parameters.AddWithValue("@sid",  societyId);
@@ -275,7 +275,7 @@ namespace JeevikaERP.Controllers
                         FROM jeevika_erp.SocVoucherHeader vh
                         LEFT JOIN jeevika_erp.SocMember m 
                                ON (vh.PersonCode = m.MemCode OR vh.PersonCode = CAST(m.MemberId AS VARCHAR) OR vh.RefNo = m.MemCode)
-                              AND (m.SocietyId = vh.SocietyId OR m.SocietyId = 1) AND m.IsDeleted = FALSE
+                              AND m.SocietyId = vh.SocietyId AND m.IsDeleted = FALSE
                         WHERE vh.SocietyId = @sid AND vh.VoucherType = 'MemberReceipt' AND vh.IsDeleted = FALSE
                         ORDER BY vh.VoucherDate DESC, vh.VoucherId DESC";
                     cmd.Parameters.AddWithValue("@sid",  societyId);
@@ -474,8 +474,9 @@ namespace JeevikaERP.Controllers
                 // 2. Fetch Member Name & Flat No
                 using var memCmd = conn.CreateCommand();
                 memCmd.Transaction = tx;
-                memCmd.CommandText = "SELECT MemCode, MemName, Wing, FlatNo FROM jeevika_erp.SocMember WHERE MemberId = @mid";
+                memCmd.CommandText = "SELECT MemCode, MemName, Wing, FlatNo FROM jeevika_erp.SocMember WHERE MemberId = @mid AND SocietyId = @sid AND IsDeleted = FALSE";
                 memCmd.Parameters.AddWithValue("@mid", (object?)model.MemberId ?? DBNull.Value);
+                memCmd.Parameters.AddWithValue("@sid", (object?)model.SocietyId ?? DBNull.Value);
 
                 string memCode = "", memName = "", flat = "";
                 using (var rM = memCmd.ExecuteReader())
@@ -1164,7 +1165,9 @@ namespace JeevikaERP.Controllers
         [HttpGet("template-meta")]
         public IActionResult GetTemplateMeta([FromQuery] int societyId)
         {
-            if (societyId <= 0) societyId = 4;
+            if (societyId <= 0)
+                return BadRequest(new { success = false, message = "societyId is required." });
+
             try
             {
                 using var conn = DbHelper.GetConn();
@@ -1173,7 +1176,7 @@ namespace JeevikaERP.Controllers
                 var billTypes = new List<object>();
                 using (var cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT BillTypeId, BillTypeName FROM jeevika_erp.SocBillType WHERE SocietyId = @sid OR SocietyId = 1 ORDER BY BillTypeId ASC";
+                    cmd.CommandText = "SELECT BillTypeId, BillTypeName FROM jeevika_erp.SocBillType WHERE SocietyId = @sid ORDER BY BillTypeId ASC";
                     cmd.Parameters.AddWithValue("@sid", societyId);
                     using var r = cmd.ExecuteReader();
                     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1196,7 +1199,7 @@ namespace JeevikaERP.Controllers
                 var rawMembers = new List<(int MemberId, string Code, string Name, string Wing, string Flat, string FlatStr, string Label)>();
                 using (var cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT MemberId, MemCode, MemName, Wing, FlatNo FROM jeevika_erp.SocMember WHERE (SocietyId = @sid OR SocietyId = 1) AND IsDeleted = FALSE ORDER BY MemCode ASC, MemName ASC";
+                    cmd.CommandText = "SELECT MemberId, MemCode, MemName, Wing, FlatNo FROM jeevika_erp.SocMember WHERE SocietyId = @sid AND IsDeleted = FALSE ORDER BY MemCode ASC, MemName ASC";
                     cmd.Parameters.AddWithValue("@sid", societyId);
                     using var r = cmd.ExecuteReader();
                     while (r.Read())
@@ -1233,7 +1236,7 @@ namespace JeevikaERP.Controllers
                         memCode = rm.Code,
                         memName = rm.Name,
                         wing = rm.Wing,
-                        flatNo = rm.Flat,
+                        flatNo = !string.IsNullOrEmpty(rm.FlatStr) ? rm.FlatStr : rm.Flat,
                         label = rm.Label,
                         principalDue = prinDue,
                         interestDue = intDue,
@@ -1253,7 +1256,7 @@ namespace JeevikaERP.Controllers
                         SELECT a.AccountId, a.AccCode, a.AccName, a.GroupId, g.GrpName, a.GrpMainId
                         FROM jeevika_erp.SocAccount a
                         LEFT JOIN jeevika_erp.SocGroup g ON a.GroupId = g.GroupId
-                        WHERE (a.SocietyId = @sid OR a.SocietyId = 1) AND a.IsDeleted = FALSE
+                        WHERE a.SocietyId = @sid AND a.IsDeleted = FALSE
                         ORDER BY a.AccCode ASC, a.AccName ASC";
                     cmd.Parameters.AddWithValue("@sid", societyId);
 
@@ -1328,7 +1331,9 @@ namespace JeevikaERP.Controllers
         [HttpGet("export-data")]
         public IActionResult GetExportData([FromQuery] int societyId = 0, [FromQuery] int fyId = 0, [FromQuery] string? billType = null)
         {
-            if (societyId <= 0) societyId = 4;
+            if (societyId <= 0)
+                return BadRequest(new { success = false, message = "societyId is required." });
+
             try
             {
                 using var conn = DbHelper.GetConn();
@@ -1342,7 +1347,7 @@ namespace JeevikaERP.Controllers
                     FROM jeevika_erp.SocVoucherHeader vh
                     LEFT JOIN jeevika_erp.SocMember m 
                            ON (vh.PersonCode = m.MemCode OR vh.PersonCode = CAST(m.MemberId AS VARCHAR) OR vh.RefNo = m.MemCode)
-                          AND (m.SocietyId = vh.SocietyId OR m.SocietyId = 1) AND m.IsDeleted = FALSE
+                          AND m.SocietyId = vh.SocietyId AND m.IsDeleted = FALSE
                     WHERE vh.SocietyId = @sid AND vh.VoucherType = 'MemberReceipt' AND vh.IsDeleted = FALSE";
 
                 if (fyId > 0)
@@ -1472,7 +1477,10 @@ namespace JeevikaERP.Controllers
             if (req == null || req.Rows == null || req.Rows.Count == 0)
                 return BadRequest(new { success = false, message = "No receipt rows provided." });
 
-            int sid = req.SocietyId > 0 ? req.SocietyId : 4;
+            if (req.SocietyId <= 0)
+                return BadRequest(new { success = false, message = "societyId is required." });
+
+            int sid = req.SocietyId;
             int fyid = req.FYId > 0 ? req.FYId : 1;
 
             try
@@ -1483,7 +1491,7 @@ namespace JeevikaERP.Controllers
                 var members = new List<(int Id, string Code, string Name, string Wing, string Flat)>();
                 using (var cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT MemberId, MemCode, MemName, Wing, FlatNo FROM jeevika_erp.SocMember WHERE (SocietyId = @sid OR SocietyId = 1) AND IsDeleted = FALSE";
+                    cmd.CommandText = "SELECT MemberId, MemCode, MemName, Wing, FlatNo FROM jeevika_erp.SocMember WHERE SocietyId = @sid AND IsDeleted = FALSE";
                     cmd.Parameters.AddWithValue("@sid", sid);
                     using var r = cmd.ExecuteReader();
                     while (r.Read())
@@ -1501,7 +1509,7 @@ namespace JeevikaERP.Controllers
                 var billTypes = new Dictionary<string, (int Id, string Name)>(StringComparer.OrdinalIgnoreCase);
                 using (var cmd = conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT BillTypeId, BillTypeName FROM jeevika_erp.SocBillType WHERE SocietyId = @sid OR SocietyId = 1";
+                    cmd.CommandText = "SELECT BillTypeId, BillTypeName FROM jeevika_erp.SocBillType WHERE SocietyId = @sid";
                     cmd.Parameters.AddWithValue("@sid", sid);
                     using var r = cmd.ExecuteReader();
                     while (r.Read())
@@ -1523,7 +1531,7 @@ namespace JeevikaERP.Controllers
                         SELECT a.AccountId, a.AccCode, a.AccName, g.GrpName
                         FROM jeevika_erp.SocAccount a
                         LEFT JOIN jeevika_erp.SocGroup g ON a.GroupId = g.GroupId
-                        WHERE (a.SocietyId = @sid OR a.SocietyId = 1) AND a.IsDeleted = FALSE";
+                        WHERE a.SocietyId = @sid AND a.IsDeleted = FALSE";
                     cmd.Parameters.AddWithValue("@sid", sid);
                     using var r = cmd.ExecuteReader();
                     while (r.Read())
@@ -1583,7 +1591,16 @@ namespace JeevikaERP.Controllers
 
                     if (!string.IsNullOrEmpty(mCode))
                     {
-                        var f = members.FirstOrDefault(m => m.Code.Equals(mCode, StringComparison.OrdinalIgnoreCase) || m.Id.ToString() == mCode);
+                        var cleanCode = mCode.Trim();
+                        var f = members.FirstOrDefault(m =>
+                            m.Code.Equals(cleanCode, StringComparison.OrdinalIgnoreCase) ||
+                            m.Code.Replace("/", "-").Equals(cleanCode.Replace("/", "-"), StringComparison.OrdinalIgnoreCase) ||
+                            m.Id.ToString() == cleanCode ||
+                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}-{m.Flat}".Equals(cleanCode.Replace("/", "-"), StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}/{m.Flat}".Equals(cleanCode.Replace("-", "/"), StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}{m.Flat}".Equals(cleanCode.Replace("-", "").Replace("/", ""), StringComparison.OrdinalIgnoreCase)) ||
+                            m.Flat.Equals(cleanCode, StringComparison.OrdinalIgnoreCase)
+                        );
                         if (f.Id > 0) memByCode = f;
                     }
 
@@ -1614,9 +1631,12 @@ namespace JeevikaERP.Controllers
                     {
                         var cleanFlat = mFlat.Trim().ToLower();
                         var f = members.FirstOrDefault(m =>
-                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}-{m.Flat}".Equals(cleanFlat, StringComparison.OrdinalIgnoreCase)) ||
-                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}{m.Flat}".Equals(cleanFlat, StringComparison.OrdinalIgnoreCase)) ||
-                            m.Flat.Equals(cleanFlat, StringComparison.OrdinalIgnoreCase)
+                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}-{m.Flat}".Equals(cleanFlat.Replace("/", "-"), StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}/{m.Flat}".Equals(cleanFlat.Replace("-", "/"), StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(m.Wing) && $"{m.Wing}{m.Flat}".Equals(cleanFlat.Replace("-", "").Replace("/", ""), StringComparison.OrdinalIgnoreCase)) ||
+                            m.Flat.Equals(cleanFlat, StringComparison.OrdinalIgnoreCase) ||
+                            m.Code.Equals(cleanFlat, StringComparison.OrdinalIgnoreCase) ||
+                            m.Code.Replace("/", "-").Equals(cleanFlat.Replace("/", "-"), StringComparison.OrdinalIgnoreCase)
                         );
                         if (f.Id > 0) memByFlat = f;
                     }
@@ -1818,7 +1838,10 @@ namespace JeevikaERP.Controllers
             if (req == null || req.Rows == null || req.Rows.Count == 0)
                 return BadRequest(new { success = false, message = "No receipt rows to import." });
 
-            int sid = req.SocietyId > 0 ? req.SocietyId : 4;
+            if (req.SocietyId <= 0)
+                return BadRequest(new { success = false, message = "societyId is required." });
+
+            int sid = req.SocietyId;
             int fyid = req.FYId > 0 ? req.FYId : 1;
 
             try
@@ -1871,7 +1894,7 @@ namespace JeevikaERP.Controllers
                 using (var accCmd = conn.CreateCommand())
                 {
                     accCmd.Transaction = tx;
-                    accCmd.CommandText = "SELECT AccountId, AccCode, AccName FROM jeevika_erp.SocAccount WHERE (SocietyId = @sid OR SocietyId = 1) AND (AccCode = 'ASS-1025' OR AccName ILIKE 'Dues From Members%') AND IsDeleted = FALSE ORDER BY (CASE WHEN SocietyId = @sid THEN 0 ELSE 1 END) LIMIT 1";
+                    accCmd.CommandText = "SELECT AccountId, AccCode, AccName FROM jeevika_erp.SocAccount WHERE SocietyId = @sid AND (AccCode = 'ASS-1025' OR AccName ILIKE 'Dues From Members%') AND IsDeleted = FALSE ORDER BY (CASE WHEN AccCode = 'ASS-1025' THEN 0 ELSE 1 END) LIMIT 1";
                     accCmd.Parameters.AddWithValue("@sid", sid);
                     using var rA = accCmd.ExecuteReader();
                     if (rA.Read())
