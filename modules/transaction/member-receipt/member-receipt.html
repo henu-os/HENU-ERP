@@ -897,6 +897,13 @@
         </select>
       </div>
 
+      <div class="filter-group" style="display:flex; align-items:center; gap:6px;">
+        <label class="filter-lbl" style="font-size:10px; font-weight:700; color:#475569;">BILL TYPE:</label>
+        <select id="bs-billtype-filter" class="filter-sel" style="min-width:140px; height:24px; border:1px solid #94a3b8; border-radius:3px; font-size:11px;" onchange="filterBankSlip()">
+          <option value="">-- All Bill Types --</option>
+        </select>
+      </div>
+
       <div class="filter-group" style="display:flex; align-items:center; gap:4px;">
         <label class="filter-lbl" style="font-size:10px; font-weight:700; color:#475569;">DATE RANGE:</label>
         <input type="date" id="bs-from-date" class="filter-inp" style="height:24px; border:1px solid #94a3b8; border-radius:3px; font-size:11px; padding:0 4px;" onchange="filterBankSlip()">
@@ -924,6 +931,7 @@
             <th style="width:85px;">DATE</th>
             <th style="width:115px;">RECEIPT NO</th>
             <th>MEMBER</th>
+            <th style="width:110px; text-align:center;">BILL TYPE</th>
             <th style="width:100px;">CHEQUE NO</th>
             <th style="width:130px;">BANK</th>
             <th style="width:140px;">DEPOSIT ACC</th>
@@ -934,7 +942,7 @@
         <tbody id="chq-tbody"></tbody>
         <tfoot id="chq-tfoot" style="background:#f1f5f9; font-weight:700; border-top:2px solid #cbd5e1;">
           <tr>
-            <td colspan="6" style="text-align:right; padding:6px 12px; font-size:11px; color:#334155;">TOTAL DEPOSIT:</td>
+            <td colspan="7" style="text-align:right; padding:6px 12px; font-size:11px; color:#334155;">TOTAL DEPOSIT:</td>
             <td id="bs-total-amount" style="text-align:right; padding:6px 10px; font-size:12px; color:#1565C0; font-family:'Consolas', monospace; font-weight:800;">₹0.00</td>
             <td></td>
           </tr>

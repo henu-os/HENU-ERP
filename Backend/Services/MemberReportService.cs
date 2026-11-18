@@ -1041,119 +1041,401 @@ namespace JeevikaERP.Services
         }
 
         // ═══════════════════════════════════════════════════════════
-        // 9. MEMBER_DATA_SHEET (Data Sheet)
+        // 9. MEMBER_DATA_SHEET (Data Sheet — Bill & Collection Register)
         // ═══════════════════════════════════════════════════════════
         public static object GetDataSheet(
             NpgsqlConnection conn,
             int societyId,
-            string? wing,
-            string? flatType,
-            string? memberType,
-            string? searchText)
+            int fyId = 0,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? billTypeId = null,
+            string? wing = null,
+            string? searchText = null,
+            string? flatType = null,
+            string? memberType = null)
         {
             var societyMeta = GetSocietyMeta(conn, societyId);
+            var (fyStart, fyEnd, fyLabel) = GetFiscalYearBounds(conn, societyId, fyId);
 
-            using var cmd = conn.CreateCommand();
-            var sql = @"
-                SELECT MemberId, MemCode, MemName, MemName2, MemName3, MemMarName,
-                       Building, Wing, FlatNo, Floor, UnitType, FlatType, AreaSqft, AreaUnit,
-                       ContactNo, Email, PANNo, TANNo, MemberType, Shares, EntryDate,
-                       NonOccApplicable, TenantName, TenantContact,
-                       ParkingSlot2W, ParkingSlot4W, VehicleNo2W, VehicleNo4W,
-                       LienBankName, LienAmount, LienStatus,
-                       ShareCertNo, FolioNo,
-                       OpPrincipal, OpInterest, CreatedAt
-                FROM jeevika_erp.SocMember
-                WHERE (SocietyId = @sid OR @sid <= 0)
-                  AND IsDeleted = FALSE";
+            DateTime bFrom = fromDate ?? fyStart;
+            DateTime bTo = toDate ?? (DateTime.Now.Date >= fyStart && DateTime.Now.Date <= fyEnd ? DateTime.Now.Date : fyEnd);
 
-            cmd.Parameters.AddWithValue("@sid", societyId);
+            bool isGstSociety = Convert.ToBoolean(societyMeta.GetValueOrDefault("GSTApplicable", false))
+                                || !string.IsNullOrWhiteSpace(societyMeta.GetValueOrDefault("GSTNumber", "")?.ToString());
+
+            // 1. Fetch Bill Types for dropdown
+            var billTypesList = new List<Dictionary<string, object>>();
+            using (var btCmd = conn.CreateCommand())
+            {
+                btCmd.CommandText = @"
+                    SELECT BillTypeId, BillTypeName 
+                    FROM jeevika_erp.SocBillType 
+                    WHERE (SocietyId = @sid OR SocietyId = 0) AND IsActive = TRUE 
+                    ORDER BY CASE WHEN LOWER(TRIM(BillTypeName)) = 'maintenance' THEN 0 ELSE 1 END, BillTypeName ASC";
+                btCmd.Parameters.AddWithValue("@sid", societyId);
+                using var rBt = btCmd.ExecuteReader();
+                while (rBt.Read())
+                {
+                    billTypesList.Add(new Dictionary<string, object>
+                    {
+                        ["billTypeId"] = Convert.ToInt32(rBt["BillTypeId"]),
+                        ["billTypeName"] = rBt["BillTypeName"]?.ToString() ?? ""
+                    });
+                }
+            }
+
+            // 2. Query Bills in period
+            using var cmdBills = conn.CreateCommand();
+            var billSql = @"
+                SELECT b.BillId, b.BillNo, b.BillDate, b.DueDate, b.Period,
+                       b.PrincipalAmount, b.InterestAmount, b.TotalAmount, b.PaidAmount, b.BalanceAmount, b.Status,
+                       b.BillTypeId, COALESCE(bt.BillTypeName, b.BillType, 'Maintenance') AS BillTypeName,
+                       m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo, COALESCE(m.AreaSqft, 0) AS AreaSqft,
+                       COALESCE(m.OpPrincipal, 0) AS OpPrincipal, COALESCE(m.OpInterest, 0) AS OpInterest
+                FROM jeevika_erp.SocMemberBill b
+                JOIN jeevika_erp.SocMember m ON b.MemberId = m.MemberId
+                LEFT JOIN jeevika_erp.SocBillType bt ON b.BillTypeId = bt.BillTypeId
+                WHERE (b.SocietyId = @sid OR @sid <= 0)
+                  AND b.IsDeleted = FALSE
+                  AND b.BillDate >= @bFrom AND b.BillDate <= @bTo";
+
+            cmdBills.Parameters.AddWithValue("@sid", societyId);
+            cmdBills.Parameters.AddWithValue("@bFrom", bFrom);
+            cmdBills.Parameters.AddWithValue("@bTo", bTo);
+
+            if (billTypeId.HasValue && billTypeId.Value > 0)
+            {
+                billSql += " AND b.BillTypeId = @btId";
+                cmdBills.Parameters.AddWithValue("@btId", billTypeId.Value);
+            }
 
             if (!string.IsNullOrWhiteSpace(wing) && wing != "all")
             {
-                sql += " AND Wing = @wing";
-                cmd.Parameters.AddWithValue("@wing", wing.Trim());
+                billSql += " AND m.Wing = @wing";
+                cmdBills.Parameters.AddWithValue("@wing", wing.Trim());
             }
 
-            if (!string.IsNullOrWhiteSpace(flatType) && flatType != "all")
-            {
-                sql += " AND FlatType = @fType";
-                cmd.Parameters.AddWithValue("@fType", flatType.Trim());
-            }
+            billSql += " ORDER BY b.BillDate ASC, b.BillNo ASC, m.Wing ASC, m.FlatNo ASC";
+            cmdBills.CommandText = billSql;
 
-            if (!string.IsNullOrWhiteSpace(memberType) && memberType != "all")
-            {
-                sql += " AND MemberType = @mType";
-                cmd.Parameters.AddWithValue("@mType", memberType.Trim());
-            }
-
-            if (!string.IsNullOrWhiteSpace(searchText))
-            {
-                sql += " AND (MemName ILIKE @st OR MemCode ILIKE @st OR FlatNo ILIKE @st OR ContactNo ILIKE @st OR PANNo ILIKE @st)";
-                cmd.Parameters.AddWithValue("@st", $"%{searchText.Trim()}%");
-            }
-
-            sql += " ORDER BY Wing, FlatNo, MemCode";
-            cmd.CommandText = sql;
-
-            var members = new List<Dictionary<string, object>>();
-            decimal totalArea = 0m;
-            decimal totalOpening = 0m;
-            int srNo = 1;
-
-            using (var r = cmd.ExecuteReader())
+            var bills = new List<Dictionary<string, object>>();
+            using (var r = cmdBills.ExecuteReader())
             {
                 while (r.Read())
                 {
-                    decimal area = Convert.ToDecimal(r["AreaSqft"]);
+                    decimal prin = Convert.ToDecimal(r["PrincipalAmount"]);
+                    decimal intr = Convert.ToDecimal(r["InterestAmount"]);
                     decimal opP = Convert.ToDecimal(r["OpPrincipal"]);
                     decimal opI = Convert.ToDecimal(r["OpInterest"]);
-                    totalArea += area;
-                    totalOpening += (opP + opI);
+                    decimal arrears = opP + opI;
+                    decimal totalDues = prin + intr + arrears;
 
-                    members.Add(new Dictionary<string, object>
+                    string w = r["Wing"]?.ToString()?.Trim() ?? "";
+                    string fn = r["FlatNo"]?.ToString()?.Trim() ?? "";
+                    string mc = r["MemCode"]?.ToString()?.Trim() ?? "";
+                    string code = !string.IsNullOrWhiteSpace(w) && !string.IsNullOrWhiteSpace(fn)
+                        ? $"{w}/{fn}"
+                        : (!string.IsNullOrWhiteSpace(mc) ? mc : fn);
+
+                    bills.Add(new Dictionary<string, object>
                     {
-                        ["srNo"] = srNo++,
+                        ["billId"] = Convert.ToInt32(r["BillId"]),
+                        ["billNo"] = r["BillNo"]?.ToString() ?? "",
+                        ["billDate"] = Convert.ToDateTime(r["BillDate"]).ToString("dd/MM/yyyy"),
+                        ["billDateRaw"] = Convert.ToDateTime(r["BillDate"]).ToString("yyyy-MM-dd"),
                         ["memberId"] = Convert.ToInt32(r["MemberId"]),
-                        ["memberCode"] = r["MemCode"]?.ToString() ?? "",
-                        ["memberName"] = r["MemName"]?.ToString() ?? "",
-                        ["coOwner"] = r["MemName2"]?.ToString() ?? "",
-                        ["building"] = r["Building"]?.ToString() ?? "",
-                        ["wing"] = r["Wing"]?.ToString() ?? "",
-                        ["flat"] = r["FlatNo"]?.ToString() ?? "",
-                        ["block"] = r["Building"]?.ToString() ?? "",
-                        ["floor"] = r["Floor"]?.ToString() ?? "",
-                        ["flatType"] = r["FlatType"]?.ToString() ?? "",
-                        ["areaSqft"] = area,
-                        ["mobile"] = r["ContactNo"]?.ToString() ?? "",
-                        ["email"] = r["Email"]?.ToString() ?? "",
-                        ["pan"] = r["PANNo"]?.ToString() ?? "",
-                        ["gstin"] = societyMeta.GetValueOrDefault("GSTNumber", "")?.ToString() ?? "",
-                        ["address"] = $"{r["Wing"]}-{r["FlatNo"]}, {r["Building"]}",
-                        ["ownership"] = r["MemberType"]?.ToString() ?? "Owner",
-                        ["membershipDate"] = r["EntryDate"] != DBNull.Value ? Convert.ToDateTime(r["EntryDate"]).ToString("yyyy-MM-dd") : "",
-                        ["shareCertificate"] = r["ShareCertNo"]?.ToString() ?? "",
-                        ["parking"] = $"{r["ParkingSlot2W"]} {r["ParkingSlot4W"]}".Trim(),
-                        ["shares"] = Convert.ToInt32(r["Shares"]),
-                        ["opPrincipal"] = opP,
-                        ["opInterest"] = opI,
-                        ["totalOpening"] = opP + opI
+                        ["memberCode"] = mc,
+                        ["code"] = code,
+                        ["name"] = r["MemName"]?.ToString() ?? "",
+                        ["wing"] = w,
+                        ["flatNo"] = fn,
+                        ["billAmount"] = prin,
+                        ["interest"] = intr,
+                        ["arrears"] = arrears,
+                        ["totalDues"] = totalDues,
+                        ["paidAmount"] = Convert.ToDecimal(r["PaidAmount"]),
+                        ["balanceAmount"] = Convert.ToDecimal(r["BalanceAmount"]),
+                        ["status"] = r["Status"]?.ToString() ?? "Unpaid",
+                        ["billType"] = r["BillTypeName"]?.ToString() ?? "Maintenance"
                     });
                 }
+            }
+
+            // 3. Query Receipts in period
+            using var cmdRcpt = conn.CreateCommand();
+            var rcptSql = @"
+                SELECT v.VoucherId, v.VoucherNo, v.VoucherDate, v.Amount, v.PersonName, v.PersonCode,
+                       v.CashBankCode, v.CashBankName, v.ChqNo, v.ChqDate, v.BankName, v.Narration, v.RefNo,
+                       m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo
+                FROM jeevika_erp.SocVoucherHeader v
+                LEFT JOIN jeevika_erp.SocMember m ON (
+                    (m.SocietyId = v.SocietyId OR v.SocietyId <= 0) AND (
+                        UPPER(TRIM(COALESCE(v.PersonCode, ''))) = UPPER(TRIM(COALESCE(m.MemCode, ''))) 
+                        OR UPPER(TRIM(COALESCE(v.RefNo, ''))) = UPPER(TRIM(COALESCE(m.MemCode, ''))) 
+                        OR (v.PersonName IS NOT NULL AND m.MemName IS NOT NULL AND v.PersonName ILIKE '%' || m.MemName || '%')
+                    )
+                )
+                WHERE (v.SocietyId = @sid OR @sid <= 0)
+                  AND v.VoucherType IN ('Receipt', 'MemberReceipt', 'MRV', 'RV')
+                  AND v.IsDeleted = FALSE
+                  AND v.VoucherDate >= @bFrom AND v.VoucherDate <= @bTo";
+
+            cmdRcpt.Parameters.AddWithValue("@sid", societyId);
+            cmdRcpt.Parameters.AddWithValue("@bFrom", bFrom);
+            cmdRcpt.Parameters.AddWithValue("@bTo", bTo);
+
+            if (!string.IsNullOrWhiteSpace(wing) && wing != "all")
+            {
+                rcptSql += " AND m.Wing = @wing";
+                cmdRcpt.Parameters.AddWithValue("@wing", wing.Trim());
+            }
+
+            rcptSql += " ORDER BY v.VoucherDate ASC, v.VoucherNo ASC";
+            cmdRcpt.CommandText = rcptSql;
+
+            var receiptsByMemberId = new Dictionary<int, List<Dictionary<string, object>>>();
+            var receiptsByMemCode = new Dictionary<string, List<Dictionary<string, object>>>(StringComparer.OrdinalIgnoreCase);
+            var receiptsByName = new Dictionary<string, List<Dictionary<string, object>>>(StringComparer.OrdinalIgnoreCase);
+            var allReceiptsList = new List<Dictionary<string, object>>();
+            var seenVoucherIds = new HashSet<int>();
+
+            using (var r = cmdRcpt.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    int vId = Convert.ToInt32(r["VoucherId"]);
+                    if (seenVoucherIds.Contains(vId)) continue;
+                    seenVoucherIds.Add(vId);
+
+                    int? mId = r["MemberId"] != DBNull.Value ? Convert.ToInt32(r["MemberId"]) : null;
+                    string mCode = r["MemCode"]?.ToString()?.Trim() ?? r["PersonCode"]?.ToString()?.Trim() ?? "";
+                    string pName = r["MemName"]?.ToString()?.Trim() ?? r["PersonName"]?.ToString()?.Trim() ?? "";
+
+                    DateTime vDate = Convert.ToDateTime(r["VoucherDate"]);
+                    string chqDateStr = "";
+                    if (r["ChqDate"] != DBNull.Value)
+                    {
+                        var cd = r["ChqDate"].ToString()?.Trim() ?? "";
+                        if (DateTime.TryParse(cd, out var dtChq))
+                            chqDateStr = dtChq.ToString("dd/MM/yyyy");
+                        else
+                            chqDateStr = cd;
+                    }
+
+                    string w = r["Wing"]?.ToString()?.Trim() ?? "";
+                    string fn = r["FlatNo"]?.ToString()?.Trim() ?? "";
+                    string code = !string.IsNullOrWhiteSpace(w) && !string.IsNullOrWhiteSpace(fn)
+                        ? $"{w}/{fn}"
+                        : (!string.IsNullOrWhiteSpace(mCode) ? mCode : fn);
+
+                    var rcptItem = new Dictionary<string, object>
+                    {
+                        ["voucherId"] = vId,
+                        ["voucherNo"] = r["VoucherNo"]?.ToString() ?? "",
+                        ["recDate"] = vDate.ToString("dd/MM/yyyy"),
+                        ["recDateRaw"] = vDate.ToString("yyyy-MM-dd"),
+                        ["chqNo"] = r["ChqNo"]?.ToString()?.Trim() ?? "",
+                        ["chqDate"] = chqDateStr,
+                        ["bankName"] = r["BankName"]?.ToString()?.Trim() ?? "",
+                        ["amount"] = Convert.ToDecimal(r["Amount"]),
+                        ["narration"] = r["Narration"]?.ToString()?.Trim() ?? "",
+                        ["memberId"] = mId ?? 0,
+                        ["memberCode"] = mCode,
+                        ["code"] = code,
+                        ["name"] = pName,
+                        ["wing"] = w,
+                        ["flatNo"] = fn
+                    };
+
+                    allReceiptsList.Add(rcptItem);
+
+                    if (mId.HasValue && mId.Value > 0)
+                    {
+                        if (!receiptsByMemberId.ContainsKey(mId.Value)) receiptsByMemberId[mId.Value] = new List<Dictionary<string, object>>();
+                        receiptsByMemberId[mId.Value].Add(rcptItem);
+                    }
+                    if (!string.IsNullOrWhiteSpace(mCode))
+                    {
+                        if (!receiptsByMemCode.ContainsKey(mCode)) receiptsByMemCode[mCode] = new List<Dictionary<string, object>>();
+                        receiptsByMemCode[mCode].Add(rcptItem);
+                    }
+                    if (!string.IsNullOrWhiteSpace(pName))
+                    {
+                        if (!receiptsByName.ContainsKey(pName)) receiptsByName[pName] = new List<Dictionary<string, object>>();
+                        receiptsByName[pName].Add(rcptItem);
+                    }
+                }
+            }
+
+            // 4. Pair bills with receipts
+            var rows = new List<Dictionary<string, object>>();
+            var usedReceiptVoucherIds = new HashSet<int>();
+
+            int srNo = 1;
+            decimal totalBillAmount = 0m;
+            decimal totalInterest = 0m;
+            decimal totalArrears = 0m;
+            decimal totalDuesSum = 0m;
+            decimal totalCollections = 0m;
+
+            foreach (var b in bills)
+            {
+                int mId = (int)b["memberId"];
+                string mCode = b["memberCode"]?.ToString() ?? "";
+                string pName = b["name"]?.ToString() ?? "";
+
+                // Find first unused receipt matching this member
+                Dictionary<string, object>? matchedRcpt = null;
+                if (receiptsByMemberId.TryGetValue(mId, out var rList1))
+                {
+                    matchedRcpt = rList1.FirstOrDefault(x => !usedReceiptVoucherIds.Contains((int)x["voucherId"]));
+                }
+                if (matchedRcpt == null && !string.IsNullOrWhiteSpace(mCode) && receiptsByMemCode.TryGetValue(mCode, out var rList2))
+                {
+                    matchedRcpt = rList2.FirstOrDefault(x => !usedReceiptVoucherIds.Contains((int)x["voucherId"]));
+                }
+                if (matchedRcpt == null && !string.IsNullOrWhiteSpace(pName) && receiptsByName.TryGetValue(pName, out var rList3))
+                {
+                    matchedRcpt = rList3.FirstOrDefault(x => !usedReceiptVoucherIds.Contains((int)x["voucherId"]));
+                }
+
+                decimal bAmt = Convert.ToDecimal(b["billAmount"]);
+                decimal intr = Convert.ToDecimal(b["interest"]);
+                decimal arr = Convert.ToDecimal(b["arrears"]);
+                decimal dues = Convert.ToDecimal(b["totalDues"]);
+
+                totalBillAmount += bAmt;
+                totalInterest += intr;
+                totalArrears += arr;
+                totalDuesSum += dues;
+
+                string rDate = "";
+                string chqNo = "";
+                string chqDate = "";
+                string bankName = "";
+                decimal rcptAmt = 0m;
+
+                if (matchedRcpt != null)
+                {
+                    usedReceiptVoucherIds.Add((int)matchedRcpt["voucherId"]);
+                    rDate = matchedRcpt["recDate"]?.ToString() ?? "";
+                    chqNo = matchedRcpt["chqNo"]?.ToString() ?? "";
+                    chqDate = matchedRcpt["chqDate"]?.ToString() ?? "";
+                    bankName = matchedRcpt["bankName"]?.ToString() ?? "";
+                    rcptAmt = Convert.ToDecimal(matchedRcpt["amount"]);
+                    totalCollections += rcptAmt;
+                }
+
+                rows.Add(new Dictionary<string, object>
+                {
+                    ["srNo"] = srNo++,
+                    ["billNo"] = b["billNo"],
+                    ["date"] = b["billDate"],
+                    ["dateRaw"] = b["billDateRaw"],
+                    ["code"] = b["code"],
+                    ["name"] = b["name"],
+                    ["wing"] = b["wing"],
+                    ["flatNo"] = b["flatNo"],
+                    ["billAmount"] = bAmt,
+                    ["interest"] = intr,
+                    ["arrears"] = arr,
+                    ["totalDues"] = dues,
+                    ["recDate"] = rDate,
+                    ["chqNo"] = chqNo,
+                    ["chqDate"] = chqDate,
+                    ["bankName"] = bankName,
+                    ["amount"] = rcptAmt,
+                    ["status"] = rcptAmt >= dues && dues > 0 ? "Paid" : (rcptAmt > 0 ? "Partial" : "Unpaid")
+                });
+            }
+
+            // Also include any leftover receipts that were not paired with a bill in this period
+            foreach (var r in allReceiptsList)
+            {
+                int vId = (int)r["voucherId"];
+                if (usedReceiptVoucherIds.Contains(vId)) continue;
+                usedReceiptVoucherIds.Add(vId);
+
+                decimal rAmt = Convert.ToDecimal(r["amount"]);
+                totalCollections += rAmt;
+
+                rows.Add(new Dictionary<string, object>
+                {
+                    ["srNo"] = srNo++,
+                    ["billNo"] = "-",
+                    ["date"] = "-",
+                    ["dateRaw"] = "",
+                    ["code"] = r["code"],
+                    ["name"] = r["name"],
+                    ["wing"] = r["wing"],
+                    ["flatNo"] = r["flatNo"],
+                    ["billAmount"] = 0m,
+                    ["interest"] = 0m,
+                    ["arrears"] = 0m,
+                    ["totalDues"] = 0m,
+                    ["recDate"] = r["recDate"]?.ToString() ?? "",
+                    ["chqNo"] = r["chqNo"]?.ToString() ?? "",
+                    ["chqDate"] = r["chqDate"]?.ToString() ?? "",
+                    ["bankName"] = r["bankName"]?.ToString() ?? "",
+                    ["amount"] = rAmt,
+                    ["status"] = "Advance"
+                });
+            }
+
+            // Apply search filter if requested
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                string st = searchText.Trim().ToLowerInvariant();
+                rows = rows.Where(x =>
+                    (x["name"]?.ToString()?.ToLowerInvariant().Contains(st) == true) ||
+                    (x["code"]?.ToString()?.ToLowerInvariant().Contains(st) == true) ||
+                    (x["billNo"]?.ToString()?.ToLowerInvariant().Contains(st) == true) ||
+                    (x["chqNo"]?.ToString()?.ToLowerInvariant().Contains(st) == true) ||
+                    (x["bankName"]?.ToString()?.ToLowerInvariant().Contains(st) == true)
+                ).ToList();
             }
 
             return new
             {
                 success = true,
                 reportKey = "MEMBER_DATA_SHEET",
-                society = societyMeta,
+                society = new
+                {
+                    societyId = societyId,
+                    societyName = societyMeta.GetValueOrDefault("SocietyName", "")?.ToString() ?? "",
+                    address = societyMeta.GetValueOrDefault("Address", "")?.ToString() ?? "",
+                    registrationNo = societyMeta.GetValueOrDefault("RegistrationNo", "")?.ToString() ?? "",
+                    pan = societyMeta.GetValueOrDefault("PANNumber", "")?.ToString() ?? "",
+                    isGst = isGstSociety,
+                    gstin = societyMeta.GetValueOrDefault("GSTNumber", "")?.ToString() ?? ""
+                },
+                fyLabel = fyLabel,
+                dateRange = new
+                {
+                    from = bFrom.ToString("yyyy-MM-dd"),
+                    to = bTo.ToString("yyyy-MM-dd"),
+                    displayFrom = bFrom.ToString("dd/MM/yyyy"),
+                    displayTo = bTo.ToString("dd/MM/yyyy")
+                },
+                defaultBounds = new
+                {
+                    start = fyStart.ToString("yyyy-MM-dd"),
+                    current = (DateTime.Now.Date >= fyStart && DateTime.Now.Date <= fyEnd ? DateTime.Now.Date : fyEnd).ToString("yyyy-MM-dd")
+                },
+                billTypes = billTypesList,
                 summary = new
                 {
-                    totalMembers = members.Count,
-                    totalAreaSqft = totalArea,
-                    totalOpeningBalance = totalOpening
+                    totalBills = bills.Count,
+                    totalBillAmount = totalBillAmount,
+                    totalInterest = totalInterest,
+                    totalArrears = totalArrears,
+                    totalDues = totalDuesSum,
+                    totalCollections = totalCollections,
+                    outstanding = totalDuesSum - totalCollections,
+                    collectionRatio = totalDuesSum > 0 ? Math.Round((totalCollections / totalDuesSum) * 100, 2) : 0
                 },
-                members = members
+                rows = rows
             };
         }
 
@@ -1171,18 +1453,91 @@ namespace JeevikaERP.Services
             string? fromBillNo,
             string? toBillNo)
         {
+            // Ensure GSTIN column exists in SocMember
+            try
+            {
+                using var migCmd = conn.CreateCommand();
+                migCmd.CommandText = "ALTER TABLE jeevika_erp.SocMember ADD COLUMN IF NOT EXISTS GSTIN VARCHAR(50);";
+                migCmd.ExecuteNonQuery();
+            }
+            catch { }
+
             var societyMeta = GetSocietyMeta(conn, societyId);
             var (fyStart, fyEnd, fyLabel) = GetFiscalYearBounds(conn, societyId, fyId);
+            
+            // Default FromDate: START of FY (fyStart)
             DateTime bFrom = fromDate ?? fyStart;
-            DateTime bTo = toDate ?? fyEnd;
+            // Default ToDate: CURRENT date (capped or as selected, handling future FY smoothly)
+            DateTime bTo = toDate ?? (DateTime.Now.Date >= fyStart && DateTime.Now.Date <= fyEnd ? DateTime.Now.Date : fyEnd);
 
+            bool isGstSociety = Convert.ToBoolean(societyMeta.GetValueOrDefault("GSTApplicable", false))
+                                || !string.IsNullOrWhiteSpace(societyMeta.GetValueOrDefault("GSTNumber", "")?.ToString());
+            string societyGstin = societyMeta.GetValueOrDefault("GSTNumber", "")?.ToString() ?? "";
+            string sacCode = societyMeta.GetValueOrDefault("HSNCode", "999599")?.ToString() ?? "999599";
+            decimal cgstPct = Convert.ToDecimal(societyMeta.GetValueOrDefault("CGSTPct", 9.00m));
+            decimal sgstPct = Convert.ToDecimal(societyMeta.GetValueOrDefault("SGSTPct", 9.00m));
+            decimal exemptLimit = Convert.ToDecimal(societyMeta.GetValueOrDefault("ExemptLimit", 7500.00m));
+
+            // 1. Fetch all Bill Types for the society
+            var billTypesList = new List<Dictionary<string, object>>();
+            using (var btCmd = conn.CreateCommand())
+            {
+                btCmd.CommandText = @"
+                    SELECT BillTypeId, BillTypeName 
+                    FROM jeevika_erp.SocBillType 
+                    WHERE (SocietyId = @sid OR SocietyId = 0) AND IsActive = TRUE 
+                    ORDER BY CASE WHEN LOWER(TRIM(BillTypeName)) = 'maintenance' THEN 0 ELSE 1 END, BillTypeName ASC";
+                btCmd.Parameters.AddWithValue("@sid", societyId);
+                using var rBt = btCmd.ExecuteReader();
+                while (rBt.Read())
+                {
+                    billTypesList.Add(new Dictionary<string, object>
+                    {
+                        ["billTypeId"] = Convert.ToInt32(rBt["BillTypeId"]),
+                        ["billTypeName"] = rBt["BillTypeName"]?.ToString() ?? ""
+                    });
+                }
+            }
+
+            // 2. Fetch configured head GST exemptions lookup
+            var headExemptMap = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            using (var hCmd = conn.CreateCommand())
+            {
+                hCmd.CommandText = @"
+                    SELECT AccountCode, AccountName, GSTExempted, GSTApplicable 
+                    FROM jeevika_erp.SocBillTypeHead 
+                    WHERE SocietyId = @sid OR SocietyId = 0";
+                hCmd.Parameters.AddWithValue("@sid", societyId);
+                using var rH = hCmd.ExecuteReader();
+                while (rH.Read())
+                {
+                    string code = rH["AccountCode"]?.ToString()?.Trim() ?? "";
+                    string name = rH["AccountName"]?.ToString()?.Trim() ?? "";
+                    bool isEx = rH["GSTExempted"] != DBNull.Value && Convert.ToBoolean(rH["GSTExempted"]);
+                    if (!string.IsNullOrEmpty(code)) headExemptMap[code] = isEx;
+                    if (!string.IsNullOrEmpty(name)) headExemptMap[name] = isEx;
+                }
+            }
+
+            bool IsHeadExempt(string code, string name)
+            {
+                if (headExemptMap.TryGetValue(code, out var ex1)) return ex1;
+                if (headExemptMap.TryGetValue(name, out var ex2)) return ex2;
+                string lower = name.ToLowerInvariant();
+                return lower.Contains("property tax") || lower.Contains("muncipal") || lower.Contains("municipal") ||
+                       lower.Contains("water charge") || lower.Contains("water tax") || lower.Contains("electricity") ||
+                       lower.Contains("n.a. tax") || lower.Contains("na tax") || lower.Contains("non agricultural");
+            }
+
+            // 3. Query all bills matching filters
             using var cmd = conn.CreateCommand();
             var sql = @"
                 SELECT b.BillId, b.BillNo, b.BillDate, b.DueDate, b.Period,
                        b.PrincipalAmount, b.InterestAmount, b.TotalAmount, b.PaidAmount, b.BalanceAmount, b.Status,
-                       COALESCE(bt.BillTypeName, b.BillType, 'Maintenance') AS BillTypeName,
-                       m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo, m.AreaSqft,
-                       m.OpPrincipal, m.OpInterest
+                       b.BillTypeId, COALESCE(bt.BillTypeName, b.BillType, 'Maintenance') AS BillTypeName,
+                       m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo, COALESCE(m.AreaSqft, 0) AS AreaSqft,
+                       COALESCE(m.GSTIN, '') AS MemberGSTIN,
+                       COALESCE(m.OpPrincipal, 0) AS OpPrincipal, COALESCE(m.OpInterest, 0) AS OpInterest
                 FROM jeevika_erp.SocMemberBill b
                 JOIN jeevika_erp.SocMember m ON b.MemberId = m.MemberId
                 LEFT JOIN jeevika_erp.SocBillType bt ON b.BillTypeId = bt.BillTypeId
@@ -1213,81 +1568,337 @@ namespace JeevikaERP.Services
                 cmd.Parameters.AddWithValue("@tNo", toBillNo.Trim());
             }
 
-            sql += " ORDER BY b.BillDate ASC, b.BillNo ASC";
+            sql += " ORDER BY b.BillDate ASC, b.BillNo ASC, m.Wing ASC, m.FlatNo ASC";
             cmd.CommandText = sql;
 
-            var bills = new List<Dictionary<string, object>>();
-            decimal totalPrincipal = 0m;
-            decimal totalInterest = 0m;
-            decimal grandTotal = 0m;
-            decimal totalPaid = 0m;
-            decimal totalBalance = 0m;
-            int srNo = 1;
+            var rawBills = new List<Dictionary<string, object>>();
+            var billIdList = new List<int>();
 
             using (var r = cmd.ExecuteReader())
             {
                 while (r.Read())
                 {
-                    decimal p = Convert.ToDecimal(r["PrincipalAmount"]);
-                    decimal i = Convert.ToDecimal(r["InterestAmount"]);
-                    decimal t = Convert.ToDecimal(r["TotalAmount"]);
-                    decimal pd = Convert.ToDecimal(r["PaidAmount"]);
-                    decimal bal = Convert.ToDecimal(r["BalanceAmount"]);
-                    decimal arrears = Convert.ToDecimal(r["OpPrincipal"]) + Convert.ToDecimal(r["OpInterest"]);
+                    int bId = Convert.ToInt32(r["BillId"]);
+                    billIdList.Add(bId);
 
-                    totalPrincipal += p;
-                    totalInterest += i;
-                    grandTotal += t;
-                    totalPaid += pd;
-                    totalBalance += bal;
-
-                    bills.Add(new Dictionary<string, object>
+                    rawBills.Add(new Dictionary<string, object>
                     {
-                        ["srNo"] = srNo++,
-                        ["billId"] = Convert.ToInt32(r["BillId"]),
-                        ["billNumber"] = r["BillNo"]?.ToString() ?? "",
+                        ["billId"] = bId,
+                        ["billNo"] = r["BillNo"]?.ToString() ?? "",
                         ["billDate"] = Convert.ToDateTime(r["BillDate"]).ToString("yyyy-MM-dd"),
                         ["dueDate"] = r["DueDate"] != DBNull.Value ? Convert.ToDateTime(r["DueDate"]).ToString("yyyy-MM-dd") : "",
-                        ["billingPeriod"] = r["Period"]?.ToString() ?? fyLabel,
-                        ["unit"] = $"{r["Wing"]}-{r["FlatNo"]}",
-                        ["member"] = r["MemName"]?.ToString() ?? "",
-                        ["memberCode"] = r["MemCode"]?.ToString() ?? "",
+                        ["period"] = r["Period"]?.ToString() ?? fyLabel,
+                        ["billTypeId"] = r["BillTypeId"] != DBNull.Value ? Convert.ToInt32(r["BillTypeId"]) : 0,
                         ["billType"] = r["BillTypeName"]?.ToString() ?? "Maintenance",
-                        ["maintenance"] = p * 0.7m,
-                        ["sinkingFund"] = p * 0.2m,
-                        ["parking"] = p * 0.1m,
-                        ["nonOccupancy"] = 0m,
-                        ["previousArrears"] = arrears,
-                        ["currentBill"] = p,
-                        ["tax"] = 0m,
-                        ["principalAmount"] = p,
-                        ["interestAmount"] = i,
-                        ["totalAmount"] = t,
-                        ["total"] = t,
-                        ["paidAmount"] = pd,
-                        ["balanceAmount"] = bal,
+                        ["memberId"] = Convert.ToInt32(r["MemberId"]),
+                        ["memberCode"] = r["MemCode"]?.ToString() ?? "",
+                        ["memberName"] = r["MemName"]?.ToString() ?? "",
+                        ["wing"] = r["Wing"]?.ToString() ?? "",
+                        ["flatNo"] = r["FlatNo"]?.ToString() ?? "",
+                        ["unit"] = $"{r["Wing"]}-{r["FlatNo"]}",
+                        ["area"] = Convert.ToDecimal(r["AreaSqft"]),
+                        ["memberGstin"] = r["MemberGSTIN"]?.ToString()?.Trim() ?? "",
+                        ["opPrincipal"] = Convert.ToDecimal(r["OpPrincipal"]),
+                        ["opInterest"] = Convert.ToDecimal(r["OpInterest"]),
+                        ["principalAmount"] = Convert.ToDecimal(r["PrincipalAmount"]),
+                        ["interestAmount"] = Convert.ToDecimal(r["InterestAmount"]),
+                        ["totalAmount"] = Convert.ToDecimal(r["TotalAmount"]),
+                        ["paidAmount"] = Convert.ToDecimal(r["PaidAmount"]),
+                        ["balanceAmount"] = Convert.ToDecimal(r["BalanceAmount"]),
                         ["status"] = r["Status"]?.ToString() ?? "Unpaid"
                     });
                 }
+            }
+
+            // 4. Fetch line items for all queried bills
+            var billItemsMap = new Dictionary<int, List<(string code, string name, decimal amt)>>();
+            if (billIdList.Count > 0)
+            {
+                using var itemCmd = conn.CreateCommand();
+                itemCmd.CommandText = @"
+                    SELECT BillId, AccountCode, AccountName, Amount 
+                    FROM jeevika_erp.SocMemberBillItem 
+                    WHERE BillId = ANY(@bids)
+                    ORDER BY ItemId ASC";
+                itemCmd.Parameters.AddWithValue("@bids", billIdList.ToArray());
+                using var rItem = itemCmd.ExecuteReader();
+                while (rItem.Read())
+                {
+                    int bId = Convert.ToInt32(rItem["BillId"]);
+                    string c = rItem["AccountCode"]?.ToString()?.Trim() ?? "";
+                    string n = rItem["AccountName"]?.ToString()?.Trim() ?? "";
+                    decimal amt = Convert.ToDecimal(rItem["Amount"]);
+                    if (!billItemsMap.ContainsKey(bId)) billItemsMap[bId] = new List<(string, string, decimal)>();
+                    billItemsMap[bId].Add((c, n, amt));
+                }
+            }
+
+            // 5. Identify all distinct Charge Heads (excluding taxes & interest)
+            var distinctHeadsMap = new Dictionary<string, (string code, string name, bool isExempt)>(StringComparer.OrdinalIgnoreCase);
+            var headsList = new List<Dictionary<string, object>>();
+
+            foreach (var b in rawBills)
+            {
+                int bId = (int)b["billId"];
+                if (billItemsMap.TryGetValue(bId, out var items))
+                {
+                    foreach (var it in items)
+                    {
+                        string cUpper = it.code.ToUpperInvariant();
+                        string nUpper = it.name.ToUpperInvariant();
+
+                        // Skip tax lines and interest lines from being standalone charge heads
+                        if (cUpper.StartsWith("LIA-103") || nUpper.Contains("CGST") || nUpper.Contains("SGST") || nUpper.Contains("IGST") ||
+                            cUpper == "INC-1008" || nUpper.Contains("INTEREST ON ARREARS"))
+                        {
+                            continue;
+                        }
+
+                        if (!distinctHeadsMap.ContainsKey(it.name))
+                        {
+                            bool isEx = IsHeadExempt(it.code, it.name);
+                            distinctHeadsMap[it.name] = (it.code, it.name, isEx);
+                            headsList.Add(new Dictionary<string, object>
+                            {
+                                ["code"] = it.code,
+                                ["name"] = it.name,
+                                ["isExempt"] = isEx
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Fallback if no item breakdown exists
+            if (headsList.Count == 0)
+            {
+                headsList.Add(new Dictionary<string, object> { ["code"] = "MAINT", ["name"] = "Maintenance Charges", ["isExempt"] = false });
+            }
+
+            // 6. Build bills with dynamic head mapping, subtotals, and GST calculations
+            var processedBills = new List<Dictionary<string, object>>();
+            int srNo = 1;
+
+            decimal totExemptAll = 0m;
+            decimal totTaxableAll = 0m;
+            decimal totCgstAll = 0m;
+            decimal totSgstAll = 0m;
+            decimal totGstAll = 0m;
+            decimal totPrincipalAll = 0m;
+            decimal totInterestAll = 0m;
+            decimal totArrearsAll = 0m;
+            decimal totGrandAll = 0m;
+
+            // Group subtotals for GST societies
+            var gstGroup = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            var nonGstGroup = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var b in rawBills)
+            {
+                int bId = (int)b["billId"];
+                decimal prin = (decimal)b["principalAmount"];
+                decimal intr = (decimal)b["interestAmount"];
+                decimal arrears = (decimal)b["opPrincipal"] + (decimal)b["opInterest"];
+                string mGstin = (string)b["memberGstin"];
+                bool isGstMember = !string.IsNullOrWhiteSpace(mGstin) && mGstin.Length >= 5;
+
+                var headAmounts = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                decimal billExempt = 0m;
+                decimal billTaxableServices = 0m;
+                decimal billMaintenance = 0m;
+                decimal billCgst = 0m;
+                decimal billSgst = 0m;
+
+                if (billItemsMap.TryGetValue(bId, out var items) && items.Count > 0)
+                {
+                    foreach (var it in items)
+                    {
+                        string cUpper = it.code.ToUpperInvariant();
+                        string nUpper = it.name.ToUpperInvariant();
+
+                        if (cUpper == "LIA-1032" || nUpper.Contains("CGST"))
+                        {
+                            billCgst += it.amt;
+                        }
+                        else if (cUpper == "LIA-1033" || nUpper.Contains("SGST"))
+                        {
+                            billSgst += it.amt;
+                        }
+                        else if (cUpper == "INC-1008" || nUpper.Contains("INTEREST ON ARREARS"))
+                        {
+                            // handled in interest
+                            if (intr == 0) intr = it.amt;
+                        }
+                        else
+                        {
+                            headAmounts[it.name] = (headAmounts.GetValueOrDefault(it.name, 0m)) + it.amt;
+
+                            bool isEx = IsHeadExempt(it.code, it.name);
+                            if (isEx)
+                            {
+                                billExempt += it.amt;
+                            }
+                            else
+                            {
+                                // Check if maintenance or other service
+                                string lower = it.name.ToLowerInvariant();
+                                if (lower.Contains("service") || lower.Contains("sinking") || lower.Contains("repair") || lower.Contains("welfare"))
+                                {
+                                    billMaintenance += it.amt;
+                                }
+                                else
+                                {
+                                    billTaxableServices += it.amt;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // If no items, put principal under first head
+                    string firstHead = headsList[0]["name"].ToString() ?? "Maintenance Charges";
+                    headAmounts[firstHead] = prin;
+                    billMaintenance = prin;
+                }
+
+                // If CGST/SGST wasn't stored explicitly in items but society has GST
+                if (isGstSociety && billCgst == 0 && billSgst == 0)
+                {
+                    decimal taxableBase = 0m;
+                    if (isGstMember || (billMaintenance > exemptLimit))
+                    {
+                        taxableBase = billMaintenance + billTaxableServices;
+                    }
+                    else
+                    {
+                        taxableBase = billTaxableServices;
+                    }
+
+                    if (taxableBase > 0)
+                    {
+                        billCgst = Math.Round(taxableBase * (cgstPct / 100m), 0, MidpointRounding.AwayFromZero);
+                        billSgst = Math.Round(taxableBase * (sgstPct / 100m), 0, MidpointRounding.AwayFromZero);
+                    }
+                }
+
+                decimal billTotalGst = billCgst + billSgst;
+                decimal billCurrentTotal = prin + intr + (isGstSociety && !itemsContainTax(items) ? billTotalGst : 0m);
+                decimal netTotalBill = billCurrentTotal + arrears;
+
+                totExemptAll += billExempt;
+                totTaxableAll += (billMaintenance + billTaxableServices);
+                totCgstAll += billCgst;
+                totSgstAll += billSgst;
+                totGstAll += billTotalGst;
+                totPrincipalAll += prin;
+                totInterestAll += intr;
+                totArrearsAll += arrears;
+                totGrandAll += netTotalBill;
+
+                // Group accumulation
+                var targetGroup = isGstMember ? gstGroup : nonGstGroup;
+                targetGroup["count"] = targetGroup.GetValueOrDefault("count", 0m) + 1;
+                targetGroup["exempt"] = targetGroup.GetValueOrDefault("exempt", 0m) + billExempt;
+                targetGroup["taxable"] = targetGroup.GetValueOrDefault("taxable", 0m) + (billMaintenance + billTaxableServices);
+                targetGroup["cgst"] = targetGroup.GetValueOrDefault("cgst", 0m) + billCgst;
+                targetGroup["sgst"] = targetGroup.GetValueOrDefault("sgst", 0m) + billSgst;
+                targetGroup["totalGst"] = targetGroup.GetValueOrDefault("totalGst", 0m) + billTotalGst;
+                targetGroup["principal"] = targetGroup.GetValueOrDefault("principal", 0m) + prin;
+                targetGroup["interest"] = targetGroup.GetValueOrDefault("interest", 0m) + intr;
+                targetGroup["arrears"] = targetGroup.GetValueOrDefault("arrears", 0m) + arrears;
+                targetGroup["totalBill"] = targetGroup.GetValueOrDefault("totalBill", 0m) + netTotalBill;
+
+                foreach (var h in headsList)
+                {
+                    string hName = h["name"].ToString()!;
+                    decimal hAmt = headAmounts.GetValueOrDefault(hName, 0m);
+                    targetGroup[hName] = targetGroup.GetValueOrDefault(hName, 0m) + hAmt;
+                }
+
+                processedBills.Add(new Dictionary<string, object>
+                {
+                    ["srNo"] = srNo++,
+                    ["billId"] = b["billId"],
+                    ["billNo"] = b["billNo"],
+                    ["billDate"] = b["billDate"],
+                    ["dueDate"] = b["dueDate"],
+                    ["period"] = b["period"],
+                    ["billType"] = b["billType"],
+                    ["billTypeId"] = b["billTypeId"],
+                    ["memberId"] = b["memberId"],
+                    ["memberCode"] = b["memberCode"],
+                    ["memberName"] = b["memberName"],
+                    ["wing"] = b["wing"],
+                    ["flatNo"] = b["flatNo"],
+                    ["unit"] = b["unit"],
+                    ["area"] = b["area"],
+                    ["memberGstin"] = mGstin,
+                    ["isGstMember"] = isGstMember,
+                    ["headAmounts"] = headAmounts,
+                    ["exemptSubtotal"] = billExempt,
+                    ["taxableSubtotal"] = billMaintenance + billTaxableServices,
+                    ["cgst"] = billCgst,
+                    ["sgst"] = billSgst,
+                    ["totalGst"] = billTotalGst,
+                    ["principal"] = prin,
+                    ["interest"] = intr,
+                    ["currentTotal"] = billCurrentTotal,
+                    ["arrears"] = arrears,
+                    ["totalBill"] = netTotalBill,
+                    ["status"] = b["status"]
+                });
+            }
+
+            bool itemsContainTax(List<(string code, string name, decimal amt)>? its)
+            {
+                if (its == null) return false;
+                return its.Any(x => x.code.StartsWith("LIA-103", StringComparison.OrdinalIgnoreCase) ||
+                                    x.name.Contains("CGST", StringComparison.OrdinalIgnoreCase) ||
+                                    x.name.Contains("SGST", StringComparison.OrdinalIgnoreCase));
             }
 
             return new
             {
                 success = true,
                 reportKey = "MEMBER_BILL_REGISTER",
-                society = societyMeta,
+                society = new
+                {
+                    societyId = societyMeta.GetValueOrDefault("SocietyId", societyId),
+                    societyName = societyMeta.GetValueOrDefault("SocietyName", "HOUSING SOCIETY LTD."),
+                    address = societyMeta.GetValueOrDefault("Address", ""),
+                    registrationNo = societyMeta.GetValueOrDefault("RegistrationNo", ""),
+                    isGst = isGstSociety,
+                    gstin = societyGstin,
+                    sacCode = sacCode,
+                    cgstPct = cgstPct,
+                    sgstPct = sgstPct,
+                    exemptLimit = exemptLimit
+                },
                 fyLabel = fyLabel,
                 dateRange = new { from = bFrom.ToString("yyyy-MM-dd"), to = bTo.ToString("yyyy-MM-dd") },
-                totals = new
+                defaultBounds = new { start = fyStart.ToString("yyyy-MM-dd"), current = DateTime.Now.ToString("yyyy-MM-dd") },
+                billTypes = billTypesList,
+                heads = headsList,
+                bills = processedBills,
+                totalCount = processedBills.Count,
+                summary = new
                 {
-                    totalPrincipal = totalPrincipal,
-                    totalInterest = totalInterest,
-                    grandTotal = grandTotal,
-                    totalPaid = totalPaid,
-                    totalBalance = totalBalance
+                    totalExempt = totExemptAll,
+                    totalTaxable = totTaxableAll,
+                    totalCgst = totCgstAll,
+                    totalSgst = totSgstAll,
+                    totalGst = totGstAll,
+                    totalPrincipal = totPrincipalAll,
+                    totalInterest = totInterestAll,
+                    totalArrears = totArrearsAll,
+                    grandTotal = totGrandAll
                 },
-                bills = bills,
-                totalCount = bills.Count
+                groups = new
+                {
+                    gstGroup = gstGroup,
+                    nonGstGroup = nonGstGroup
+                }
             };
         }
 
@@ -1307,7 +1918,7 @@ namespace JeevikaERP.Services
             var societyMeta = GetSocietyMeta(conn, societyId);
             var (fyStart, fyEnd, fyLabel) = GetFiscalYearBounds(conn, societyId, fyId);
             DateTime rFrom = fromDate ?? fyStart;
-            DateTime rTo = toDate ?? fyEnd;
+            DateTime rTo = toDate ?? (DateTime.Now.Date >= fyStart && DateTime.Now.Date <= fyEnd ? DateTime.Now.Date : fyEnd);
 
             using var cmd = conn.CreateCommand();
             var sql = @"
@@ -1315,7 +1926,13 @@ namespace JeevikaERP.Services
                        v.CashBankCode, v.CashBankName, v.ChqNo, v.ChqDate, v.BankName, v.Narration,
                        m.MemberId, m.MemCode, m.MemName, m.Wing, m.FlatNo
                 FROM jeevika_erp.SocVoucherHeader v
-                LEFT JOIN jeevika_erp.SocMember m ON (UPPER(TRIM(v.PersonCode)) = UPPER(TRIM(m.MemCode)) OR UPPER(TRIM(v.RefNo)) = UPPER(TRIM(m.MemCode)) OR v.PersonName ILIKE '%' || m.MemName || '%') AND (m.SocietyId = v.SocietyId)
+                LEFT JOIN jeevika_erp.SocMember m ON (
+                    (m.SocietyId = v.SocietyId OR v.SocietyId <= 0) AND (
+                        UPPER(TRIM(COALESCE(v.PersonCode, ''))) = UPPER(TRIM(COALESCE(m.MemCode, ''))) 
+                        OR UPPER(TRIM(COALESCE(v.RefNo, ''))) = UPPER(TRIM(COALESCE(m.MemCode, ''))) 
+                        OR (v.PersonName IS NOT NULL AND m.MemName IS NOT NULL AND v.PersonName ILIKE '%' || m.MemName || '%')
+                    )
+                )
                 WHERE (v.SocietyId = @sid OR @sid <= 0)
                   AND v.VoucherType IN ('Receipt', 'MemberReceipt', 'MRV', 'RV')
                   AND v.IsDeleted = FALSE
@@ -1355,29 +1972,84 @@ namespace JeevikaERP.Services
                     decimal amt = Convert.ToDecimal(r["Amount"]);
                     grandTotal += amt;
 
-                    string chq = r["ChqNo"]?.ToString() ?? "";
+                    string chq = r["ChqNo"]?.ToString()?.Trim() ?? "";
+                    string narr = r["Narration"]?.ToString()?.Trim() ?? "";
+                    string bank = r["BankName"]?.ToString()?.Trim() ?? "";
+                    string cashBankName = r["CashBankName"]?.ToString()?.Trim() ?? "";
+                    string cashBankCode = r["CashBankCode"]?.ToString()?.Trim() ?? "203";
+
                     string mode = "Cheque";
-                    if (string.IsNullOrWhiteSpace(chq)) { mode = "Cash"; totalCash += amt; }
-                    else if (chq.StartsWith("UPI", StringComparison.OrdinalIgnoreCase)) { mode = "UPI"; totalUpi += amt; }
-                    else if (chq.StartsWith("NEFT", StringComparison.OrdinalIgnoreCase)) { mode = "NEFT"; totalNeft += amt; }
-                    else { totalCheque += amt; }
+                    if (string.IsNullOrWhiteSpace(chq) && (cashBankName.ToLower().Contains("cash") || cashBankCode == "101"))
+                    {
+                        mode = "Cash";
+                        totalCash += amt;
+                    }
+                    else if (chq.StartsWith("UPI", StringComparison.OrdinalIgnoreCase) || narr.StartsWith("UPI", StringComparison.OrdinalIgnoreCase) || bank.StartsWith("UPI", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mode = "UPI";
+                        totalUpi += amt;
+                    }
+                    else if (chq.StartsWith("IMPS", StringComparison.OrdinalIgnoreCase) || narr.StartsWith("IMPS", StringComparison.OrdinalIgnoreCase) || bank.StartsWith("IMPS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mode = "IMPS";
+                        totalUpi += amt;
+                    }
+                    else if (chq.StartsWith("NEFT", StringComparison.OrdinalIgnoreCase) || chq.StartsWith("RTGS", StringComparison.OrdinalIgnoreCase) || narr.StartsWith("NEFT", StringComparison.OrdinalIgnoreCase) || bank.StartsWith("NEFT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mode = "NEFT";
+                        totalNeft += amt;
+                    }
+                    else if (chq.StartsWith("TRF", StringComparison.OrdinalIgnoreCase) || chq.StartsWith("MB/TRF", StringComparison.OrdinalIgnoreCase) || narr.StartsWith("TRF", StringComparison.OrdinalIgnoreCase) || bank.StartsWith("TRF", StringComparison.OrdinalIgnoreCase))
+                    {
+                        mode = "TRF";
+                        totalNeft += amt;
+                    }
+                    else
+                    {
+                        mode = "Cheque";
+                        totalCheque += amt;
+                    }
+
+                    // Format flat display: Wing/FlatNo or FlatNo or MemCode
+                    string w = r["Wing"]?.ToString()?.Trim() ?? "";
+                    string f = r["FlatNo"]?.ToString()?.Trim() ?? "";
+                    string flatDisplay = !string.IsNullOrEmpty(w) && !string.IsNullOrEmpty(f) ? $"{w}/{f}" : (!string.IsNullOrEmpty(f) ? f : (r["MemCode"]?.ToString()?.Trim() ?? ""));
+
+                    // Instrument date formatting
+                    string chqDateStr = "";
+                    if (r["ChqDate"] != DBNull.Value)
+                    {
+                        DateTime cd = Convert.ToDateTime(r["ChqDate"]);
+                        chqDateStr = cd.ToString("dd.MM.yyyy");
+                    }
+                    else
+                    {
+                        chqDateStr = Convert.ToDateTime(r["VoucherDate"]).ToString("dd.MM.yyyy");
+                    }
+
+                    // Bank name vs narration representation (matching legacy format)
+                    string bankDisplay = !string.IsNullOrWhiteSpace(bank) ? bank : (!string.IsNullOrWhiteSpace(narr) ? narr : cashBankName);
+
+                    // Society's Receiving Cash/Bank Account Name
+                    string receivingAccount = !string.IsNullOrWhiteSpace(cashBankName) ? cashBankName : (!string.IsNullOrWhiteSpace(cashBankCode) ? cashBankCode : "Society Bank A/C");
 
                     receipts.Add(new Dictionary<string, object>
                     {
                         ["srNo"] = srNo++,
                         ["voucherId"] = Convert.ToInt32(r["VoucherId"]),
-                        ["receiptNumber"] = r["VoucherNo"]?.ToString() ?? "",
-                        ["receiptDate"] = Convert.ToDateTime(r["VoucherDate"]).ToString("yyyy-MM-dd"),
-                        ["unit"] = $"{r["Wing"]}-{r["FlatNo"]}",
-                        ["member"] = r["MemName"]?.ToString() ?? r["PersonName"]?.ToString() ?? "",
-                        ["memberCode"] = r["MemCode"]?.ToString() ?? r["PersonCode"]?.ToString() ?? "",
-                        ["paymentMode"] = mode,
-                        ["referenceNumber"] = chq,
-                        ["bank"] = r["BankName"]?.ToString() ?? r["CashBankName"]?.ToString() ?? "",
+                        ["receiptNo"] = r["VoucherNo"]?.ToString() ?? "",
+                        ["date"] = Convert.ToDateTime(r["VoucherDate"]).ToString("dd/MM/yyyy"),
+                        ["flatNo"] = flatDisplay,
+                        ["name"] = r["MemName"]?.ToString() ?? r["PersonName"]?.ToString() ?? "",
+                        ["cashBank"] = receivingAccount,
+                        ["cashBankCode"] = cashBankCode,
+                        ["cashBankName"] = cashBankName,
+                        ["chqNo"] = !string.IsNullOrWhiteSpace(chq) ? chq : mode,
+                        ["chqDate"] = chqDateStr,
+                        ["bankName"] = bankDisplay,
                         ["amount"] = amt,
-                        ["allocation"] = "Maintenance Dues",
-                        ["status"] = "Posted",
-                        ["narration"] = r["Narration"]?.ToString() ?? ""
+                        ["mode"] = mode,
+                        ["narration"] = narr
                     });
                 }
             }
@@ -1389,6 +2061,7 @@ namespace JeevikaERP.Services
                 society = societyMeta,
                 fyLabel = fyLabel,
                 dateRange = new { from = rFrom.ToString("yyyy-MM-dd"), to = rTo.ToString("yyyy-MM-dd") },
+                defaultBounds = new { start = fyStart.ToString("yyyy-MM-dd"), current = DateTime.Now.ToString("yyyy-MM-dd") },
                 totalAmount = grandTotal,
                 summary = new
                 {

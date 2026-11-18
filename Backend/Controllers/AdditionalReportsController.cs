@@ -307,6 +307,20 @@ namespace JeevikaERP.Controllers
                 INSERT INTO {prefix}SocFundMaster (SocietyId, FundName, FundCode, FundType, OpeningBalance, Purpose)
                 SELECT 1, 'Education & Training Fund', 'FND-EDU', 'Education & Training Fund', 15000.00, 'Statutory Member Education & Training contribution'
                 WHERE NOT EXISTS (SELECT 1 FROM {prefix}SocFundMaster WHERE FundCode = 'FND-EDU');
+
+                -- ── 4. BUDGET MODULE TABLES ────────────────────────────
+                CREATE TABLE IF NOT EXISTS {prefix}SocBudget (
+                    BudgetId SERIAL PRIMARY KEY,
+                    SocietyId INT NOT NULL,
+                    FYId INT NOT NULL,
+                    AccountId INT NOT NULL,
+                    ApprovedAmount NUMERIC(18,2) DEFAULT 0.00,
+                    ProposedAmount NUMERIC(18,2) DEFAULT 0.00,
+                    Remarks VARCHAR(255),
+                    CreatedAt TIMESTAMPTZ DEFAULT NOW(),
+                    UpdatedAt TIMESTAMPTZ DEFAULT NOW(),
+                    CONSTRAINT uq_soc_budget UNIQUE (SocietyId, FYId, AccountId)
+                );
             ";
             cmd.ExecuteNonQuery();
         }
@@ -2558,6 +2572,571 @@ namespace JeevikaERP.Controllers
                 pincode = pincode,
                 financialYear = "2026-2027"
             };
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // 5. BUDGET REPORT (INCOME & EXPENDITURE ESTIMATES) ENDPOINTS
+        // ═══════════════════════════════════════════════════════════
+
+        // ── GET /api/additional-reports/budget/report ───────────────
+        [HttpGet("budget/report")]
+        public IActionResult GetBudgetReport(
+            [FromQuery] int societyId = 1,
+            [FromQuery] int fyId = 1,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] bool comparePrevFY = true)
+        {
+            if (societyId <= 0) societyId = 1;
+
+            try
+            {
+                using var conn = DbHelper.GetConn();
+                EnsureAdditionalReportTables(conn);
+                string prefix = GetSchemaPrefix(conn);
+                MemberReceiptController.EnsureReceiptLedgerEntries(conn, societyId);
+
+                // 1. Society Profile
+                string socName = "", regNo = "", address = "", city = "";
+                using (var sCmd = conn.CreateCommand())
+                {
+                    sCmd.CommandText = $"SELECT SocietyName, RegistrationNo, Address, City FROM {prefix}SocietyInfo WHERE SocietyId = @sid LIMIT 1";
+                    AddParam(sCmd, "@sid", societyId);
+                    using var rS = sCmd.ExecuteReader();
+                    if (rS.Read())
+                    {
+                        socName = rS["SocietyName"]?.ToString() ?? "";
+                        regNo   = rS["RegistrationNo"]?.ToString() ?? "";
+                        address = rS["Address"]?.ToString() ?? "";
+                        city    = rS["City"]?.ToString() ?? "";
+                    }
+                }
+
+                // 2. Resolve Active FY
+                DateTime? fyStart = null;
+                DateTime? fyEnd = null;
+                string fyLabel = "";
+                using (var fyCmd = conn.CreateCommand())
+                {
+                    fyCmd.CommandText = $"SELECT FYId, FYLabel, FYStart, FYEnd FROM {prefix}FinancialYear WHERE (SocietyId = @sid OR @sid <= 0) AND (FYId = @fyid OR (@fyid <= 0 AND IsActive = TRUE)) ORDER BY FYId DESC LIMIT 1";
+                    AddParam(fyCmd, "@sid", societyId);
+                    AddParam(fyCmd, "@fyid", fyId);
+                    using var rFy = fyCmd.ExecuteReader();
+                    if (rFy.Read())
+                    {
+                        fyId = Convert.ToInt32(rFy["FYId"]);
+                        fyLabel = rFy["FYLabel"]?.ToString() ?? "";
+                        if (rFy["FYStart"] != DBNull.Value) fyStart = Convert.ToDateTime(rFy["FYStart"]);
+                        if (rFy["FYEnd"] != DBNull.Value) fyEnd = Convert.ToDateTime(rFy["FYEnd"]);
+                    }
+                }
+
+                DateTime effectiveFrom = fromDate.HasValue ? fromDate.Value.Date : (fyStart.HasValue ? fyStart.Value.Date : DateTime.Today);
+                DateTime effectiveTo   = toDate.HasValue   ? toDate.Value.Date   : (fyEnd.HasValue   ? fyEnd.Value.Date   : DateTime.Today);
+
+                // 3. Resolve Previous FY
+                int prevFyId = 0;
+                string prevFyLabel = "";
+                DateTime? prevFyStart = null;
+                DateTime? prevFyEnd = null;
+                if (comparePrevFY && fyStart.HasValue)
+                {
+                    using (var pFyCmd = conn.CreateCommand())
+                    {
+                        pFyCmd.CommandText = $@"
+                            SELECT FYId, FYLabel, FYStart, FYEnd 
+                            FROM {prefix}FinancialYear 
+                            WHERE (SocietyId = @sid OR @sid <= 0) AND FYEnd < @curStart
+                            ORDER BY FYEnd DESC LIMIT 1";
+                        AddParam(pFyCmd, "@sid", societyId);
+                        AddParam(pFyCmd, "@curStart", fyStart.Value);
+                        using var rP = pFyCmd.ExecuteReader();
+                        if (rP.Read())
+                        {
+                            prevFyId = Convert.ToInt32(rP["FYId"]);
+                            prevFyLabel = rP["FYLabel"]?.ToString() ?? "";
+                            if (rP["FYStart"] != DBNull.Value) prevFyStart = Convert.ToDateTime(rP["FYStart"]);
+                            if (rP["FYEnd"] != DBNull.Value) prevFyEnd = Convert.ToDateTime(rP["FYEnd"]);
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(prevFyLabel) && !string.IsNullOrEmpty(fyLabel) && fyLabel.Contains("-"))
+                {
+                    var pParts = fyLabel.Split('-');
+                    if (pParts.Length == 2 && int.TryParse(pParts[0], out int py1) && int.TryParse(pParts[1], out int py2))
+                    {
+                        prevFyLabel = $"{py1 - 1}-{py2 - 1}";
+                    }
+                }
+
+                // 4. Resolve Next FY (Upcoming FY for Proposed Budget)
+                int nextFyId = 0;
+                string nextFyLabel = "";
+                if (fyEnd.HasValue)
+                {
+                    using (var nFyCmd = conn.CreateCommand())
+                    {
+                        nFyCmd.CommandText = $@"
+                            SELECT FYId, FYLabel 
+                            FROM {prefix}FinancialYear 
+                            WHERE (SocietyId = @sid OR @sid <= 0) AND FYStart > @curEnd
+                            ORDER BY FYStart ASC LIMIT 1";
+                        AddParam(nFyCmd, "@sid", societyId);
+                        AddParam(nFyCmd, "@curEnd", fyEnd.Value);
+                        using var rN = nFyCmd.ExecuteReader();
+                        if (rN.Read())
+                        {
+                            nextFyId = Convert.ToInt32(rN["FYId"]);
+                            nextFyLabel = rN["FYLabel"]?.ToString() ?? "";
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(nextFyLabel) && !string.IsNullOrEmpty(fyLabel) && fyLabel.Contains("-"))
+                {
+                    var nParts = fyLabel.Split('-');
+                    if (nParts.Length == 2 && int.TryParse(nParts[0], out int ny1) && int.TryParse(nParts[1], out int ny2))
+                    {
+                        nextFyLabel = $"{ny1 + 1}-{ny2 + 1}";
+                    }
+                }
+
+                // 5. Query Member Bill Credits (Current & Previous FY)
+                var memberBillCredits = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                var memberBillPrevCredits = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+                using (var cmdMB = conn.CreateCommand())
+                {
+                    cmdMB.CommandText = $@"
+                        SELECT bi.AccountCode, COALESCE(bi.AccountName, '') AS AccountName, SUM(bi.Amount) AS TotalAmount
+                        FROM {prefix}SocMemberBillItem bi
+                        JOIN {prefix}SocMemberBill b ON bi.BillId = b.BillId
+                        WHERE b.SocietyId = @sid 
+                          AND (b.FYId = @fyid OR (@hasBounds = TRUE AND b.BillDate >= @fyStart AND b.BillDate <= @fyEnd))
+                          AND b.BillDate >= @from AND b.BillDate <= @to
+                          AND b.IsDeleted = FALSE
+                        GROUP BY bi.AccountCode, bi.AccountName";
+                    AddParam(cmdMB, "@sid", societyId);
+                    AddParam(cmdMB, "@fyid", fyId);
+                    AddParam(cmdMB, "@hasBounds", (fyStart.HasValue && fyEnd.HasValue));
+                    AddParam(cmdMB, "@fyStart", fyStart.HasValue ? fyStart.Value.Date : (object)DBNull.Value);
+                    AddParam(cmdMB, "@fyEnd", fyEnd.HasValue ? fyEnd.Value.Date : (object)DBNull.Value);
+                    AddParam(cmdMB, "@from", effectiveFrom);
+                    AddParam(cmdMB, "@to", effectiveTo);
+
+                    using var rMB = cmdMB.ExecuteReader();
+                    while (rMB.Read())
+                    {
+                        string c = rMB["AccountCode"]?.ToString()?.Trim() ?? "";
+                        string n = rMB["AccountName"]?.ToString()?.Trim() ?? "";
+                        decimal amt = Convert.ToDecimal(rMB["TotalAmount"]);
+                        if (!string.IsNullOrEmpty(c)) memberBillCredits[c] = memberBillCredits.GetValueOrDefault(c) + amt;
+                        if (!string.IsNullOrEmpty(n)) memberBillCredits[n] = memberBillCredits.GetValueOrDefault(n) + amt;
+                    }
+                }
+
+                if (prevFyId > 0 || prevFyStart.HasValue)
+                {
+                    using (var cmdMBP = conn.CreateCommand())
+                    {
+                        cmdMBP.CommandText = $@"
+                            SELECT bi.AccountCode, COALESCE(bi.AccountName, '') AS AccountName, SUM(bi.Amount) AS TotalAmount
+                            FROM {prefix}SocMemberBillItem bi
+                            JOIN {prefix}SocMemberBill b ON bi.BillId = b.BillId
+                            WHERE b.SocietyId = @sid 
+                              AND (b.FYId = @prevFyId OR (@hasPrevBounds = TRUE AND b.BillDate >= @prevStart AND b.BillDate <= @prevEnd))
+                              AND b.IsDeleted = FALSE
+                            GROUP BY bi.AccountCode, bi.AccountName";
+                        AddParam(cmdMBP, "@sid", societyId);
+                        AddParam(cmdMBP, "@prevFyId", prevFyId);
+                        AddParam(cmdMBP, "@hasPrevBounds", (prevFyStart.HasValue && prevFyEnd.HasValue));
+                        AddParam(cmdMBP, "@prevStart", prevFyStart.HasValue ? prevFyStart.Value.Date : (object)DBNull.Value);
+                        AddParam(cmdMBP, "@prevEnd", prevFyEnd.HasValue ? prevFyEnd.Value.Date : (object)DBNull.Value);
+
+                        using var rMBP = cmdMBP.ExecuteReader();
+                        while (rMBP.Read())
+                        {
+                            string c = rMBP["AccountCode"]?.ToString()?.Trim() ?? "";
+                            string n = rMBP["AccountName"]?.ToString()?.Trim() ?? "";
+                            decimal amt = Convert.ToDecimal(rMBP["TotalAmount"]);
+                            if (!string.IsNullOrEmpty(c)) memberBillPrevCredits[c] = memberBillPrevCredits.GetValueOrDefault(c) + amt;
+                            if (!string.IsNullOrEmpty(n)) memberBillPrevCredits[n] = memberBillPrevCredits.GetValueOrDefault(n) + amt;
+                        }
+                    }
+                }
+
+                // 6. Fetch Stored Budgets for Active FY
+                var budgetDict = new Dictionary<int, (decimal Approved, decimal Proposed, string Remarks)>();
+                using (var bCmd = conn.CreateCommand())
+                {
+                    bCmd.CommandText = $@"
+                        SELECT AccountId, COALESCE(ApprovedAmount, 0) AS ApprovedAmount, COALESCE(ProposedAmount, 0) AS ProposedAmount, Remarks
+                        FROM {prefix}SocBudget
+                        WHERE SocietyId = @sid AND FYId = @fyid";
+                    AddParam(bCmd, "@sid", societyId);
+                    AddParam(bCmd, "@fyid", fyId);
+                    using var rB = bCmd.ExecuteReader();
+                    while (rB.Read())
+                    {
+                        int accId = Convert.ToInt32(rB["AccountId"]);
+                        decimal app = Convert.ToDecimal(rB["ApprovedAmount"]);
+                        decimal prop = Convert.ToDecimal(rB["ProposedAmount"]);
+                        string rem = rB["Remarks"]?.ToString() ?? "";
+                        budgetDict[accId] = (app, prop, rem);
+                    }
+                }
+
+                // 7. Query All Income & Expenditure Accounts with Balances and Transactions
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $@"
+                    SELECT 
+                        a.AccountId, a.AccCode, a.AccName, a.GroupId,
+                        COALESCE(g.GroupName, 'General') AS GrpName,
+                        COALESCE(g.GroupCode, '') AS GrpCode,
+                        COALESCE(g.Subtotal, FALSE) AS GrpSubtotal,
+                        g.MainGroupId AS GrpMainId,
+                        COALESCE(op.PrBal, 0) AS PrBal,
+                        COALESCE(op.PrDrCr, 'Dr') AS PrDrCr,
+                        COALESCE(cur.Debit, 0) AS TxnDebit,
+                        COALESCE(cur.Credit, 0) AS TxnCredit,
+                        COALESCE(prev.PrevDebit, 0) AS PrevDebit,
+                        COALESCE(prev.PrevCredit, 0) AS PrevCredit
+                    FROM {prefix}AccountMaster a
+                    JOIN {prefix}GroupMaster g ON a.GroupId = g.GroupId
+                    LEFT JOIN {prefix}OpeningBalance op ON a.AccountId = op.AccountId AND op.FYId = @fyid AND (op.SocietyId = @sid OR @sid <= 0)
+                    LEFT JOIN (
+                        SELECT vi.AccountId,
+                               SUM(CASE WHEN vi.DrCr = 'Dr' THEN vi.Amount ELSE 0 END) AS Debit,
+                               SUM(CASE WHEN vi.DrCr = 'Cr' THEN vi.Amount ELSE 0 END) AS Credit
+                        FROM {prefix}SocVoucherItem vi
+                        JOIN {prefix}SocVoucher v ON vi.VoucherId = v.VoucherId
+                        WHERE v.SocietyId = @sid 
+                          AND (v.FYId = @fyid OR (@hasBounds = TRUE AND v.VoucherDate >= @fyStart AND v.VoucherDate <= @fyEnd))
+                          AND v.VoucherDate >= @from AND v.VoucherDate <= @to
+                          AND v.IsDeleted = FALSE
+                        GROUP BY vi.AccountId
+                    ) cur ON a.AccountId = cur.AccountId
+                    LEFT JOIN (
+                        SELECT vi.AccountId,
+                               SUM(CASE WHEN vi.DrCr = 'Dr' THEN vi.Amount ELSE 0 END) AS PrevDebit,
+                               SUM(CASE WHEN vi.DrCr = 'Cr' THEN vi.Amount ELSE 0 END) AS PrevCredit
+                        FROM {prefix}SocVoucherItem vi
+                        JOIN {prefix}SocVoucher v ON vi.VoucherId = v.VoucherId
+                        WHERE v.SocietyId = @sid 
+                          AND (v.FYId = @prevFyId OR (@hasPrevBounds = TRUE AND v.VoucherDate >= @prevStart AND v.VoucherDate <= @prevEnd))
+                          AND v.IsDeleted = FALSE
+                        GROUP BY vi.AccountId
+                    ) prev ON a.AccountId = prev.AccountId
+                    WHERE (a.SocietyId = @sid OR @sid <= 0) 
+                      AND a.IsActive = TRUE 
+                      AND g.MainGroupId IN (3, 4)
+                    ORDER BY g.MainGroupId ASC, g.GroupName ASC, a.AccCode ASC, a.AccName ASC";
+
+                AddParam(cmd, "@sid", societyId);
+                AddParam(cmd, "@fyid", fyId);
+                AddParam(cmd, "@hasBounds", (fyStart.HasValue && fyEnd.HasValue));
+                AddParam(cmd, "@fyStart", fyStart.HasValue ? fyStart.Value.Date : (object)DBNull.Value);
+                AddParam(cmd, "@fyEnd", fyEnd.HasValue ? fyEnd.Value.Date : (object)DBNull.Value);
+                AddParam(cmd, "@from", effectiveFrom);
+                AddParam(cmd, "@to", effectiveTo);
+                AddParam(cmd, "@prevFyId", prevFyId);
+                AddParam(cmd, "@hasPrevBounds", (prevFyStart.HasValue && prevFyEnd.HasValue));
+                AddParam(cmd, "@prevStart", prevFyStart.HasValue ? prevFyStart.Value.Date : (object)DBNull.Value);
+                AddParam(cmd, "@prevEnd", prevFyEnd.HasValue ? prevFyEnd.Value.Date : (object)DBNull.Value);
+
+                var expGroupsDict = new Dictionary<string, dynamic>();
+                var incGroupsDict = new Dictionary<string, dynamic>();
+
+                decimal totExpPrevActual = 0m, totExpApproved = 0m, totExpCurrentActual = 0m, totExpProposed = 0m;
+                decimal totIncPrevActual = 0m, totIncApproved = 0m, totIncCurrentActual = 0m, totIncProposed = 0m;
+
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                    {
+                        var accId = Convert.ToInt32(r["AccountId"]);
+                        var accCode = r["AccCode"].ToString() ?? "";
+                        var accName = r["AccName"].ToString() ?? "";
+                        var grpId = r["GroupId"] != DBNull.Value ? Convert.ToInt32(r["GroupId"]) : 0;
+                        var grpName = r["GrpName"]?.ToString() ?? "General";
+                        var grpCode = r["GrpCode"]?.ToString() ?? "";
+                        bool grpSubtotal = r["GrpSubtotal"] != DBNull.Value && Convert.ToBoolean(r["GrpSubtotal"]);
+                        int grpMain = Convert.ToInt32(r["GrpMainId"]);
+
+                        decimal prBal = Convert.ToDecimal(r["PrBal"]);
+                        string prDrCr = r["PrDrCr"]?.ToString() ?? "Dr";
+
+                        decimal txnDebit   = Convert.ToDecimal(r["TxnDebit"]);
+                        decimal txnCredit  = Convert.ToDecimal(r["TxnCredit"]);
+                        decimal prevDebit  = Convert.ToDecimal(r["PrevDebit"]);
+                        decimal prevCredit = Convert.ToDecimal(r["PrevCredit"]);
+
+                        decimal currentActual = 0;
+                        decimal prevActual = 0;
+
+                        if (grpMain == 4) // Expenditure
+                        {
+                            decimal billCredit = 0;
+                            if (memberBillCredits.TryGetValue(accCode, out var bc)) billCredit = bc;
+                            else if (memberBillCredits.TryGetValue(accName, out var bn)) billCredit = bn;
+
+                            decimal billPrevCredit = 0;
+                            if (memberBillPrevCredits.TryGetValue(accCode, out var bpc)) billPrevCredit = bpc;
+                            else if (memberBillPrevCredits.TryGetValue(accName, out var bpn)) billPrevCredit = bpn;
+
+                            currentActual = txnDebit - (txnCredit + billCredit);
+                            decimal voucherPrev = prevDebit - (prevCredit + billPrevCredit);
+                            if (voucherPrev != 0) prevActual = voucherPrev;
+                            else if (prBal != 0) prevActual = prDrCr.Equals("Dr", StringComparison.OrdinalIgnoreCase) ? prBal : -prBal;
+                        }
+                        else if (grpMain == 3) // Income
+                        {
+                            decimal billCredit = 0;
+                            if (memberBillCredits.TryGetValue(accCode, out var bc)) billCredit = bc;
+                            else if (memberBillCredits.TryGetValue(accName, out var bn)) billCredit = bn;
+
+                            decimal billPrevCredit = 0;
+                            if (memberBillPrevCredits.TryGetValue(accCode, out var bpc)) billPrevCredit = bpc;
+                            else if (memberBillPrevCredits.TryGetValue(accName, out var bpn)) billPrevCredit = bpn;
+
+                            decimal totalCredit = txnCredit + billCredit;
+                            currentActual = totalCredit - txnDebit;
+
+                            decimal voucherPrev = (prevCredit + billPrevCredit) - prevDebit;
+                            if (voucherPrev != 0) prevActual = voucherPrev;
+                            else if (prBal != 0) prevActual = prDrCr.Equals("Cr", StringComparison.OrdinalIgnoreCase) ? prBal : -prBal;
+                        }
+
+                        decimal appBudget = 0m;
+                        decimal propBudget = 0m;
+                        string remarks = "";
+                        if (budgetDict.TryGetValue(accId, out var bVals))
+                        {
+                            appBudget = bVals.Approved;
+                            propBudget = bVals.Proposed;
+                            remarks = bVals.Remarks;
+                        }
+
+                        decimal variance = currentActual - appBudget;
+
+                        var accObj = new
+                        {
+                            accountId = accId,
+                            accCode,
+                            accName,
+                            prevActual,
+                            approvedBudget = appBudget,
+                            currentActual,
+                            proposedBudget = propBudget,
+                            variance,
+                            remarks
+                        };
+
+                        if (grpMain == 4) // Expenditure
+                        {
+                            if (!expGroupsDict.ContainsKey(grpName))
+                            {
+                                expGroupsDict[grpName] = new
+                                {
+                                    groupId = grpId,
+                                    groupCode = grpCode,
+                                    groupName = grpName,
+                                    grpSubtotal,
+                                    accounts = new List<dynamic>()
+                                };
+                            }
+                            expGroupsDict[grpName].accounts.Add(accObj);
+
+                            totExpPrevActual += prevActual;
+                            totExpApproved += appBudget;
+                            totExpCurrentActual += currentActual;
+                            totExpProposed += propBudget;
+                        }
+                        else if (grpMain == 3) // Income
+                        {
+                            if (!incGroupsDict.ContainsKey(grpName))
+                            {
+                                incGroupsDict[grpName] = new
+                                {
+                                    groupId = grpId,
+                                    groupCode = grpCode,
+                                    groupName = grpName,
+                                    grpSubtotal,
+                                    accounts = new List<dynamic>()
+                                };
+                            }
+                            incGroupsDict[grpName].accounts.Add(accObj);
+
+                            totIncPrevActual += prevActual;
+                            totIncApproved += appBudget;
+                            totIncCurrentActual += currentActual;
+                            totIncProposed += propBudget;
+                        }
+                    }
+                }
+
+                // Build Final Group lists with subtotals
+                var expenditureList = new List<object>();
+                foreach (var kvp in expGroupsDict)
+                {
+                    var grp = kvp.Value;
+                    decimal gPrev = 0m, gApp = 0m, gCur = 0m, gProp = 0m;
+                    foreach (var a in grp.accounts)
+                    {
+                        gPrev += (decimal)a.prevActual;
+                        gApp += (decimal)a.approvedBudget;
+                        gCur += (decimal)a.currentActual;
+                        gProp += (decimal)a.proposedBudget;
+                    }
+                    expenditureList.Add(new
+                    {
+                        groupId = grp.groupId,
+                        groupCode = grp.groupCode,
+                        groupName = grp.groupName,
+                        grpSubtotal = (bool)grp.grpSubtotal,
+                        totalPrevActual = gPrev,
+                        totalApprovedBudget = gApp,
+                        totalCurrentActual = gCur,
+                        totalProposedBudget = gProp,
+                        totalVariance = gCur - gApp,
+                        accounts = grp.accounts
+                    });
+                }
+
+                var incomeList = new List<object>();
+                foreach (var kvp in incGroupsDict)
+                {
+                    var grp = kvp.Value;
+                    decimal gPrev = 0m, gApp = 0m, gCur = 0m, gProp = 0m;
+                    foreach (var a in grp.accounts)
+                    {
+                        gPrev += (decimal)a.prevActual;
+                        gApp += (decimal)a.approvedBudget;
+                        gCur += (decimal)a.currentActual;
+                        gProp += (decimal)a.proposedBudget;
+                    }
+                    incomeList.Add(new
+                    {
+                        groupId = grp.groupId,
+                        groupCode = grp.groupCode,
+                        groupName = grp.groupName,
+                        grpSubtotal = (bool)grp.grpSubtotal,
+                        totalPrevActual = gPrev,
+                        totalApprovedBudget = gApp,
+                        totalCurrentActual = gCur,
+                        totalProposedBudget = gProp,
+                        totalVariance = gCur - gApp,
+                        accounts = grp.accounts
+                    });
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    society = new
+                    {
+                        societyName = socName,
+                        registrationNo = regNo,
+                        address,
+                        city
+                    },
+                    period = new
+                    {
+                        fyId,
+                        fyLabel,
+                        fromDate = effectiveFrom.ToString("yyyy-MM-dd"),
+                        toDate = effectiveTo.ToString("yyyy-MM-dd"),
+                        fromDisplay = effectiveFrom.ToString("dd/MM/yyyy"),
+                        toDisplay = effectiveTo.ToString("dd/MM/yyyy"),
+                        prevFyId,
+                        prevFyLabel,
+                        nextFyId,
+                        nextFyLabel
+                    },
+                    expenditure = expenditureList,
+                    income = incomeList,
+                    totals = new
+                    {
+                        expenditure = new
+                        {
+                            prevActual = totExpPrevActual,
+                            approvedBudget = totExpApproved,
+                            currentActual = totExpCurrentActual,
+                            proposedBudget = totExpProposed,
+                            variance = totExpCurrentActual - totExpApproved
+                        },
+                        income = new
+                        {
+                            prevActual = totIncPrevActual,
+                            approvedBudget = totIncApproved,
+                            currentActual = totIncCurrentActual,
+                            proposedBudget = totIncProposed,
+                            variance = totIncCurrentActual - totIncApproved
+                        },
+                        surplusDeficit = new
+                        {
+                            prevActual = totIncPrevActual - totExpPrevActual,
+                            approvedBudget = totIncApproved - totExpApproved,
+                            currentActual = totIncCurrentActual - totExpCurrentActual,
+                            proposedBudget = totIncProposed - totExpProposed
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        // ── POST /api/additional-reports/budget/save ────────────────
+        [HttpPost("budget/save")]
+        public IActionResult SaveBudget([FromBody] JsonElement body, [FromQuery] int societyId = 1)
+        {
+            try
+            {
+                using var conn = DbHelper.GetConn();
+                EnsureAdditionalReportTables(conn);
+                string prefix = GetSchemaPrefix(conn);
+
+                int fyId = body.TryGetProperty("fyId", out var fyEl) ? fyEl.GetInt32() : 1;
+                if (body.TryGetProperty("societyId", out var sEl)) societyId = sEl.GetInt32();
+
+                if (body.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array)
+                {
+                    using var tran = conn.BeginTransaction();
+                    foreach (var item in itemsEl.EnumerateArray())
+                    {
+                        int accId = item.GetProperty("accountId").GetInt32();
+                        decimal approved = item.TryGetProperty("approvedAmount", out var apEl) ? apEl.GetDecimal() : 0m;
+                        decimal proposed = item.TryGetProperty("proposedAmount", out var prEl) ? prEl.GetDecimal() : 0m;
+                        string rem = item.TryGetProperty("remarks", out var remEl) ? (remEl.GetString() ?? "") : "";
+
+                        using var cmd = conn.CreateCommand();
+                        cmd.Transaction = tran;
+                        cmd.CommandText = $@"
+                            INSERT INTO {prefix}SocBudget (SocietyId, FYId, AccountId, ApprovedAmount, ProposedAmount, Remarks, UpdatedAt)
+                            VALUES (@sid, @fyid, @accId, @app, @prop, @rem, NOW())
+                            ON CONFLICT (SocietyId, FYId, AccountId)
+                            DO UPDATE SET ApprovedAmount = EXCLUDED.ApprovedAmount, ProposedAmount = EXCLUDED.ProposedAmount, Remarks = EXCLUDED.Remarks, UpdatedAt = NOW()";
+                        AddParam(cmd, "@sid", societyId);
+                        AddParam(cmd, "@fyid", fyId);
+                        AddParam(cmd, "@accId", accId);
+                        AddParam(cmd, "@app", approved);
+                        AddParam(cmd, "@prop", proposed);
+                        AddParam(cmd, "@rem", rem);
+                        cmd.ExecuteNonQuery();
+                    }
+                    tran.Commit();
+                }
+
+                return Ok(new { success = true, message = "Budget saved successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
         }
     }
 }

@@ -1,0 +1,619 @@
+/* ═════════════════════════════════════════════════════════════════════
+   JEEVIKA ERP v2 — SOCIETY QUICK NOTES & DASHBOARD REMINDERS
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. BOTTOM STATUS BAR BUTTON & BADGE ────────────────────── */
+.sb-notes-pill {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1e293b;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  line-height: 1.4;
+  transition: all 0.15s ease;
+  user-select: none;
+  position: relative;
+}
+
+.sb-notes-pill:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.sb-notes-pill.active {
+  background: #d97706;
+  color: #ffffff;
+  border-color: #b45309;
+}
+
+.sb-notes-pill.active i {
+  color: #ffffff !important;
+}
+
+.sb-notes-pill.active kbd {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.sb-notes-pill.has-unread {
+  border-color: #f59e0b;
+  background: #fffdf5;
+}
+
+.sb-notes-pill i {
+  color: #d97706;
+  font-size: 12px;
+}
+
+.sb-notes-pill kbd {
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid #fde68a;
+}
+
+/* Unread Badge on Status Bar Button */
+.sb-notes-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.4);
+}
+
+.sb-notes-pill.has-unread .sb-notes-count-badge {
+  animation: pulseNotesBadge 2.2s infinite ease-in-out;
+}
+
+@keyframes pulseNotesBadge {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  50% { transform: scale(1.1); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* ── 2. FLOATING QUICK NOTES WINDOW ───────────────────────────── */
+.floating-notes-widget {
+  position: fixed;
+  bottom: 34px;
+  right: 180px;
+  width: 390px;
+  max-width: calc(100vw - 40px);
+  max-height: 540px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22), 0 3px 8px rgba(15, 23, 42, 0.08);
+  z-index: 99998;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  user-select: none;
+}
+
+.floating-notes-widget.show {
+  display: flex;
+  animation: floatNotesIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes floatNotesIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Window Header */
+.fn-header {
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  border-top-left-radius: 9px;
+  border-top-right-radius: 9px;
+  gap: 8px;
+}
+
+.fn-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  overflow: hidden;
+}
+
+.fn-soc-badge {
+  display: inline-block;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.fn-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fn-hbtn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 7px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.12s ease;
+}
+
+.fn-hbtn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.fn-hbtn.fn-close-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* ── 3. ADD NOTE INPUT PANEL ─────────────────────────────────── */
+.fn-add-panel {
+  padding: 10px 12px;
+  background: #fafaf9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.fn-textarea {
+  width: 100%;
+  min-height: 56px;
+  max-height: 120px;
+  resize: vertical;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.fn-textarea:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.fn-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.fn-priority-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fn-priority-btn {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.fn-priority-btn:hover {
+  border-color: #94a3b8;
+}
+
+.fn-priority-btn.active.normal {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.fn-priority-btn.active.important {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.fn-priority-btn.active.urgent {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+.fn-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #d97706;
+  color: #ffffff;
+  border: 1px solid #b45309;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.fn-save-btn:hover {
+  background: #b45309;
+}
+
+.fn-save-btn:active {
+  transform: translateY(1px);
+}
+
+/* ── 4. FILTER TABS ─────────────────────────────────────────── */
+.fn-tabs-strip {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 2px 8px 0 8px;
+  gap: 4px;
+}
+
+.fn-tab {
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fn-tab:hover {
+  color: #0f172a;
+}
+
+.fn-tab.active {
+  color: #d97706;
+  border-bottom-color: #d97706;
+  font-weight: 700;
+}
+
+/* ── 5. NOTES LIST CONTAINER ─────────────────────────────────── */
+.fn-list-container {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 290px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #ffffff;
+}
+
+.fn-empty-state {
+  text-align: center;
+  padding: 28px 16px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.fn-empty-state i {
+  font-size: 32px;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* Individual Note Card */
+.fn-card {
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #3b82f6;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.fn-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.fn-card.priority-important {
+  border-left-color: #f59e0b;
+}
+
+.fn-card.priority-urgent {
+  border-left-color: #ef4444;
+}
+
+.fn-card.is-unread {
+  background: #fffdf5;
+  border-top-color: #fde68a;
+  border-right-color: #fde68a;
+  border-bottom-color: #fde68a;
+}
+
+.fn-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  gap: 6px;
+}
+
+.fn-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.fn-card-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.fn-card-badge.urgent {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.fn-card-badge.important {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fn-card-badge.normal {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.fn-unread-pill {
+  font-size: 9px;
+  font-weight: 700;
+  background: #ef4444;
+  color: #ffffff;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.fn-card-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #1e293b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 6px;
+}
+
+.fn-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed #f1f5f9;
+}
+
+.fn-btn-action {
+  background: none;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.12s ease;
+}
+
+.fn-btn-action:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.fn-btn-action.read-toggle:hover {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fn-btn-action.delete-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* ── 6. DASHBOARD NOTIFICATION BANNER ────────────────────────── */
+.dash-notes-banner {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1.5px solid #f59e0b;
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.12);
+  margin-bottom: 14px;
+  animation: fadeInBanner 0.25s ease-out;
+  position: relative;
+  z-index: 10;
+}
+
+@keyframes fadeInBanner {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dash-notes-banner-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-notes-banner-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 5px rgba(217, 119, 6, 0.15);
+}
+
+.dash-notes-banner-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-notes-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.dash-notes-banner-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #92400e;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.dash-notes-banner-meta {
+  font-size: 11px;
+  color: #78350f;
+  background: rgba(254, 243, 199, 0.7);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.dash-notes-banner-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dash-notes-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dash-notes-banner-btn {
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.dash-notes-banner-btn.primary {
+  background: #d97706;
+  color: #ffffff;
+  border-color: #b45309;
+}
+
+.dash-notes-banner-btn.primary:hover {
+  background: #b45309;
+}
+
+.dash-notes-banner-btn.outline {
+  background: #ffffff;
+  color: #78350f;
+  border-color: #fde68a;
+}
+
+.dash-notes-banner-btn.outline:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+
+.dash-notes-banner-btn.dismiss {
+  background: none;
+  border: none;
+  color: #92400e;
+  font-size: 14px;
+  padding: 4px 6px;
+}
+
+.dash-notes-banner-btn.dismiss:hover {
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.5);
+}

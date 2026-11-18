@@ -35,10 +35,11 @@ const CANONICAL_REPORTS = [
   { id: 'journal_register', name: 'Journal Register', category: 'Account Reports', subgroup: 'Account Reports', enabled: true, order: 27, moduleId: 'ar-journal-register' },
   { id: 'monthly_report', name: 'Monthly Report', category: 'Account Reports', subgroup: 'Account Reports', enabled: true, order: 28, moduleId: 'ar-monthly-report' },
 
-  // ADDITIONAL REPORTS (3)
-  { id: 'tds_report', name: 'TDS Report', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 29, moduleId: 'adr-tds-report' },
-  { id: 'gst_report', name: 'GST Report', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 30, moduleId: 'adr-gst-report' },
-  { id: 'fund_reports', name: 'Fund Reports', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 31, moduleId: 'adr-fund-reports' }
+  // ADDITIONAL REPORTS (4)
+  { id: 'budget_report', name: 'Budget Report', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 29, moduleId: 'adr-budget-report' },
+  { id: 'tds_report', name: 'TDS Report', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 30, moduleId: 'adr-tds-report' },
+  { id: 'gst_report', name: 'GST Report', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 31, moduleId: 'adr-gst-report' },
+  { id: 'fund_reports', name: 'Fund Reports', category: 'Additional Reports', subgroup: 'Statutory Reports', enabled: true, order: 32, moduleId: 'adr-fund-reports' }
 ];
 
 let currentReports = JSON.parse(JSON.stringify(CANONICAL_REPORTS));

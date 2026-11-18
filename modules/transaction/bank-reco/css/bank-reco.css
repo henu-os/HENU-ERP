@@ -38,7 +38,19 @@
 .erp-table td { padding: 6px 10px; border-bottom: 1px solid #F0F0F0; border-right: 1px solid #E0E0E0; color: #424242; }
 .erp-table tr:nth-child(even) { background: #FAFAFA; }
 .erp-table tr:hover { background: #E3F2FD !important; cursor: pointer; }
-.br-row-active { background: #BBDEFB !important; }
+.erp-table tr.row-active td,
+.erp-table tr.br-row-active td,
+.br-row-active {
+  background: #bfdbfe !important;
+  color: #0f172a !important;
+  font-weight: 700;
+  border-top: 1px solid #60a5fa !important;
+  border-bottom: 2px solid #1d4ed8 !important;
+}
+.erp-table tr.row-active td:first-child,
+.erp-table tr.br-row-active td:first-child {
+  border-left: 4px solid #0D47A1 !important;
+}
 .br-row-cleared { background: #E8F5E9 !important; }
 
 /* ── SIDEBAR ── */

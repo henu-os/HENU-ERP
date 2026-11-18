@@ -44,7 +44,7 @@
       if (storedFy) fyId = parseInt(storedFy, 10);
     }
 
-    return { societyId: societyId || 1, fyId: fyId || '' };
+    return { societyId: societyId || 1, fyId: fyId || '', apiBase: API_BASE };
   }
 
   async function loadActiveDesign(reportKey) {

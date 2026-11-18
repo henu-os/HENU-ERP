@@ -117,6 +117,11 @@ const DashboardApp = (() => {
       subEl.textContent = `Simple systems. Real progress. Here's what's happening with ${socName} today.`;
     }
 
+    // Render Quick Notes reminder banner on dashboard
+    if (window.QuickNotes && typeof QuickNotes.renderDashboardNotification === 'function') {
+      QuickNotes.renderDashboardNotification(socId);
+    }
+
     const refreshBtn = document.getElementById('btnRefresh');
     if (refreshBtn && !isSilent) refreshBtn.classList.add('spinning');
 

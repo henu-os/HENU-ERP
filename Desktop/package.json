@@ -61,7 +61,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "HENU ERP",
-      "artifactName": "henuerp_setup.exe",
+      "artifactName": "20261118_henuerp_setup_v02.exe",
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico",

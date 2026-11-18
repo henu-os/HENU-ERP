@@ -213,15 +213,18 @@
       return;
     }
 
+    var tableWrap = document.querySelector('.erp-table-wrap');
+    var prevScrollTop = tableWrap ? tableWrap.scrollTop : 0;
+
     var html = '';
     filtered.forEach(function (v) {
-      var vId = v.voucherId || v.voucherNo || v.id;
-      var isSel = (vId === selectedVoucherId);
+      var vId = String(v.voucherId || v.voucherNo || v.id || '');
+      var isSel = (selectedVoucherId !== null && selectedVoucherId !== undefined && String(selectedVoucherId) === vId);
       var isCleared = !!v.clearingDate;
 
       var b = getVoucherBankAmounts(v);
 
-      html += '<tr class="' + (isSel ? 'row-active' : '') + '" onclick="selectVoucherRow(\'' + vId + '\')">' +
+      html += '<tr class="' + (isSel ? 'row-active br-row-active' : '') + '" onclick="selectVoucherRow(\'' + escHtml(vId) + '\')">' +
         '<td style="font-weight:700; color:' + (isCleared ? '#2E7D32' : '#dc2626') + ';">' + (v.clearingDate || 'Uncleared') + '</td>' +
         '<td>' + (v.voucherDate || '-') + '</td>' +
         '<td style="text-align:right; font-weight:700; color:#2E7D32; font-family:\'Consolas\', monospace;" title="ERP Books: Bank Debit (Receipt/Inflow) | Statement: Bank Credit">' + (b.drAmt > 0 ? b.drAmt.toFixed(2) : '-') + '</td>' +
@@ -239,6 +242,7 @@
     });
 
     tbody.innerHTML = html;
+    if (tableWrap) tableWrap.scrollTop = prevScrollTop;
     updateSummary(filtered);
     initColumnResizing();
   };
@@ -308,8 +312,24 @@
     }, 100);
   }
 
+  function normalizeDateToYMD(dStr) {
+    if (!dStr) return '';
+    var s = String(dStr).trim();
+    if (s.indexOf('T') > 0) return s.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var parts = s.split(/[-/.]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return parts[0] + '-' + String(parts[1]).padStart(2, '0') + '-' + String(parts[2]).padStart(2, '0');
+      } else if (parts[2].length === 4) {
+        return parts[2] + '-' + String(parts[1]).padStart(2, '0') + '-' + String(parts[0]).padStart(2, '0');
+      }
+    }
+    return s;
+  }
+
   window.selectVoucherRow = function (vId) {
-    selectedVoucherId = vId;
+    selectedVoucherId = String(vId);
     renderList();
 
     var v = vouchers.find(function (x) { return String(x.voucherId || x.voucherNo || x.id) === String(vId); });
@@ -323,8 +343,32 @@
     document.getElementById('sb-part2').textContent = v.particular2 || '-';
     document.getElementById('sb-narr').textContent = v.narration || '-';
 
-    document.getElementById('sb-clearingdate').value = v.clearingDate || todayISO();
+    document.getElementById('sb-clearingdate').value = v.clearingDate ? normalizeDateToYMD(v.clearingDate) : todayISO();
     document.getElementById('sb-remark').value = v.remark || '';
+  };
+
+  window.copyVoucherDateToClearing = function () {
+    if (!selectedVoucherId) {
+      toast('Please select a voucher row first.', false);
+      return;
+    }
+    var v = vouchers.find(function (x) { return String(x.voucherId || x.voucherNo || x.id) === String(selectedVoucherId); });
+    if (!v) {
+      toast('Selected voucher not found.', false);
+      return;
+    }
+    var targetDate = v.voucherDate || v.chqDate || '';
+    if (!targetDate) {
+      toast('Selected voucher has no date.', false);
+      return;
+    }
+    var ymd = normalizeDateToYMD(targetDate);
+    var elDate = document.getElementById('sb-clearingdate');
+    if (elDate) {
+      elDate.value = ymd;
+      elDate.focus();
+    }
+    toast('Clearing Date set to Voucher Date (' + ymd + ')', true);
   };
 
   window.clearSelection = function () {
@@ -576,11 +620,14 @@
     return d.toISOString().split('T')[0];
   }
 
-  // Short-cuts (Alt+A, Ctrl+R, Ctrl+M, Ctrl+P, Esc)
+  // Short-cuts (Alt+A, Alt+D, Ctrl+R, Ctrl+M, Ctrl+P, Esc)
   document.addEventListener('keydown', function (e) {
     if (e.altKey && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       saveReconciliationDetail();
+    } else if (e.altKey && e.key.toLowerCase() === 'd') {
+      e.preventDefault();
+      copyVoucherDateToClearing();
     } else if (e.ctrlKey && e.key.toLowerCase() === 'r') {
       e.preventDefault();
       loadVouchers();

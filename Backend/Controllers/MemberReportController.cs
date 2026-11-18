@@ -3502,15 +3502,19 @@ namespace JeevikaERP.Controllers
         [HttpGet("member/data-sheet")]
         public IActionResult GetMemberDataSheetApi(
             [FromQuery] int societyId,
-            [FromQuery] string? wing,
-            [FromQuery] string? flatType,
-            [FromQuery] string? memberType,
-            [FromQuery] string? searchText)
+            [FromQuery] int fyId = 0,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] int? billTypeId = null,
+            [FromQuery] string? wing = null,
+            [FromQuery] string? searchText = null,
+            [FromQuery] string? flatType = null,
+            [FromQuery] string? memberType = null)
         {
             try
             {
                 using var conn = DbHelper.GetConn();
-                var res = Services.MemberReportService.GetDataSheet(conn, societyId, wing, flatType, memberType, searchText);
+                var res = Services.MemberReportService.GetDataSheet(conn, societyId, fyId, fromDate, toDate, billTypeId, wing, searchText, flatType, memberType);
                 return Ok(res);
             }
             catch (Exception ex)

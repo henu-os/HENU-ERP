@@ -92,7 +92,18 @@
       white-space: nowrap;
     }
     table.erp-table tr:hover td { background: #f0f9ff !important; cursor: pointer; }
-    table.erp-table tr.row-active td { background: #dbeafe !important; color: #1e40af; font-weight: 700; }
+    table.erp-table tr.row-active td,
+    table.erp-table tr.br-row-active td {
+      background: #bfdbfe !important;
+      color: #0f172a !important;
+      font-weight: 700;
+      border-top: 1px solid #60a5fa !important;
+      border-bottom: 2px solid #1d4ed8 !important;
+    }
+    table.erp-table tr.row-active td:first-child,
+    table.erp-table tr.br-row-active td:first-child {
+      border-left: 4px solid #0D47A1 !important;
+    }
 
     /* COLUMN RESIZER HANDLE */
     th { position: relative; }
@@ -130,7 +141,7 @@
     </div>
     <div style="display:flex; align-items:center; gap:12px;">
       <div style="font-size:10px; color:#64748b; font-weight:700;">
-        Alt+A Clear Row  Ctrl+R Refresh  Ctrl+M Auto Match  Ctrl+P Print Statement
+        Alt+A Save Row &nbsp;|&nbsp; Alt+D Same Date &nbsp;|&nbsp; Ctrl+R Refresh &nbsp;|&nbsp; Ctrl+M Auto Match &nbsp;|&nbsp; Ctrl+P Print
       </div>
       <button class="btn-tb-blue" style="background:#0D47A1; color:#fff;"><i class="bi bi-gear-fill"></i> SA PATH</button>
     </div>
@@ -279,8 +290,18 @@
             </div>
 
             <div>
-              <label style="font-size:10px; font-weight:800; color:#475569; text-transform:uppercase; display:block; margin-bottom:2px;">CLEARING DATE</label>
-              <input type="date" class="form-inp" id="sb-clearingdate" style="width:100%; border-color:#86efac;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                <label style="font-size:10px; font-weight:800; color:#475569; text-transform:uppercase;">CLEARING DATE</label>
+                <button type="button" onclick="copyVoucherDateToClearing()" title="Copy Voucher Date (DATE) into Clearing Date (Alt+D)" style="background:#e0f2fe; border:1px solid #7dd3fc; color:#0369a1; border-radius:3px; padding:1px 6px; font-size:10px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                  <i class="bi bi-arrow-left"></i> Same as Date (Alt+D)
+                </button>
+              </div>
+              <div style="display:flex; gap:4px; align-items:center;">
+                <input type="date" class="form-inp" id="sb-clearingdate" style="flex:1; border-color:#86efac;">
+                <button type="button" onclick="copyVoucherDateToClearing()" title="Copy Voucher Date into Clearing Date (Alt+D)" style="height:28px; width:34px; background:#0D47A1; color:#fff; border:none; border-radius:3px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  <i class="bi bi-arrow-left" style="font-size:16px; font-weight:bold;"></i>
+                </button>
+              </div>
             </div>
 
             <div>

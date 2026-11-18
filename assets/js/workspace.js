@@ -18,7 +18,6 @@ const WorkspaceManager = (() => {
     { id: 'statutory', label: 'Statutory', icon: 'bi-journal-bookmark-fill', hasSub: true },
     { id: 'admin', label: 'Admin', icon: 'bi-gear-fill', hasSub: true },
     { id: 'henu-os', label: 'HENU OS', icon: 'bi-palette-fill', hasSub: true },
-    { id: 'settings', label: 'Settings', icon: 'bi-sliders', hasSub: true },
     { id: 'help', label: 'Help & Documentation', icon: 'bi-question-circle-fill', hasSub: false }
   ];
 
@@ -130,29 +129,24 @@ const WorkspaceManager = (() => {
     { id: 'ar-payment-register', label: 'Payment Register', category: 'account-report', path: 'modules/account-reports/payment-register/payment-register.html' },
     { id: 'ar-contra-register', label: 'Contra Register', category: 'account-report', path: 'modules/account-reports/contra-register/contra-register.html' },
     { id: 'ar-journal-register', label: 'Journal Register', category: 'account-report', path: 'modules/account-reports/journal-register/journal-register.html' },
+    { id: 'ar-po-register', label: 'Purchase Order Register', category: 'account-report', path: 'modules/account-reports/po-register/po-register.html' },
+    { id: 'ar-bill-type-trf-register', label: 'Bill Type Transfer Register', category: 'account-report', path: 'modules/account-reports/bill-type-trf-register/bill-type-trf-register.html' },
     { id: 'ar-monthly-report', label: 'Monthly Report', category: 'account-report', path: 'modules/account-reports/monthly-report/monthly-report.html' },
 
     // ADDITIONAL REPORTS
     { id: 'voucher-check', label: 'Voucher Check', category: 'additional-report', path: 'modules/transaction/voucher-check/voucher-check.html' },
+    { id: 'adr-budget-report', label: 'Budget Report', category: 'additional-report', path: 'modules/additional-reports/budget-report/budget-report.html' },
     { id: 'adr-tds-report', label: 'TDS Report', category: 'additional-report', path: 'modules/additional-reports/tds-report/tds-report.html' },
     { id: 'adr-gst-report', label: 'GST Report', category: 'additional-report', path: 'modules/additional-reports/gst-report/gst-report.html' },
     { id: 'adr-fund-reports', label: 'Fund Reports', category: 'additional-report', path: 'modules/additional-reports/fund-reports/fund-reports.html' },
     { id: 'adr-multi-report', label: 'Multi Report', category: 'additional-report', path: 'modules/additional-reports/multi-report/multi-report.html' },
+    { id: 'ut-transfer', label: 'Transfer', category: 'additional-report', path: 'modules/utilities/transfer/transfer.html' },
 
     // UTILITIES
-    { id: 'ut-transfer', label: 'Transfer', category: 'utility', path: 'modules/utilities/transfer/transfer.html' },
-    { id: 'ut-renumber', label: 'Renumber', category: 'utility', path: 'modules/utilities/renumber/renumber.html' },
     { id: 'ut-last-year-bf', label: 'Last Year B/f', category: 'utility', path: 'modules/utilities/last-year-bf/last-year-bf.html' },
-    { id: 'ut-import-master-data', label: 'Import Master Data', category: 'utility', path: 'modules/utilities/import-master-data/import-master-data.html' },
-    { id: 'ut-export-member-master', label: 'Export Member Master', category: 'utility', path: 'modules/utilities/export-member-master/export-member-master.html' },
-    { id: 'ut-default-group-setting', label: 'Default Group Setting', category: 'utility', path: 'modules/utilities/default-group-setting/default-group-setting.html' },
     { id: 'ut-rebuild', label: 'Rebuild', category: 'utility', path: 'modules/utilities/rebuild/rebuild.html' },
     { id: 'ut-check-difference', label: 'Check Difference', category: 'utility', path: 'modules/utilities/check-difference/check-difference.html' },
     { id: 'ut-new-year-cf', label: 'New Year C/f', category: 'utility', path: 'modules/utilities/new-year-cf/new-year-cf.html' },
-    { id: 'ut-new-tran-type', label: 'New Tran Type', category: 'utility', path: 'modules/utilities/new-voucher-type/new-voucher-type.html' },
-    { id: 'ut-select-year', label: 'Select Year', category: 'utility', path: 'modules/utilities/select-year/select-year.html' },
-    { id: 'ut-calculator', label: 'Calculator', category: 'utility', path: 'modules/utilities/calculator/calculator.html' },
-    { id: 'ut-gst-calculator', label: 'GST Calculate', category: 'utility', path: 'modules/utilities/gst-calculator/gst-calculator.html' },
     { id: 'ut-year-extension', label: 'Year Extension', category: 'utility', path: 'modules/utilities/year-extension/year-extension.html' },
 
     // COMMUNICATION
@@ -266,19 +260,7 @@ const WorkspaceManager = (() => {
     { id: 'audit-log', label: 'System Audit Logs', category: 'admin', path: 'modules/admin/audit-log/audit-log.html' },
 
     // HENU OS
-    { id: 'henu-member-designs', label: 'Member Reports Designs', category: 'henu-os', path: 'modules/settings/henu-os-design/henu-os-design.html' },
-    { id: 'henu-os-design', label: 'Member Reports Designs', category: 'henu-os', path: 'modules/settings/henu-os-design/henu-os-design.html' },
-
-    // SETTINGS
-    {
-      id: 'henu-db-universal-group',
-      label: 'HENU DB UNIVERSAL',
-      category: 'settings',
-      isGroup: true,
-      children: [
-        { id: 'henu-db-universal-merge', label: 'Universal Database Merge', path: 'modules/settings/henu-db-universal/henu-db-universal.html' }
-      ]
-    }
+    { id: 'henu-os-design', label: 'Member Reports Designs', category: 'henu-os', path: 'modules/settings/henu-os-design/henu-os-design.html' }
   ];
 
   let openCategories = { 'master': true };
@@ -576,6 +558,10 @@ const WorkspaceManager = (() => {
     }
 
     updateGstMenuVisibility();
+
+    if (window.QuickNotes && typeof window.QuickNotes.onSocietyChange === 'function') {
+      window.QuickNotes.onSocietyChange();
+    }
 
     if (window.DashboardApp && typeof window.DashboardApp.loadDashboard === 'function') {
       window.DashboardApp.loadDashboard();
@@ -918,6 +904,17 @@ const WorkspaceManager = (() => {
         break;
       case 'updateGstMenuVisibility':
         updateGstMenuVisibility();
+        break;
+      case 'toggleCalculator':
+        if (typeof window.toggleFloatingCalculator === 'function') {
+          window.toggleFloatingCalculator();
+        }
+        break;
+      case 'toggleNotes':
+      case 'toggleQuickNotes':
+        if (typeof window.toggleQuickNotes === 'function') {
+          window.toggleQuickNotes();
+        }
         break;
       default:
         console.warn('Unknown WorkspaceManager action:', action);

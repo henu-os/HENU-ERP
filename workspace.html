@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="assets/css/global.css">
   <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/floating-calc.css?v=20261114_v1">
+  <link rel="stylesheet" href="assets/css/quick-notes.css?v=20261116_v1">
   <link rel="stylesheet" href="modules/dashboard/dashboard.css?v=20261001_v2">
   <style>
     html,
@@ -741,6 +743,9 @@
             </div>
           </header>
 
+          <!-- ── QUICK NOTES DASHBOARD REMINDER BANNER ────────────────── -->
+          <div id="dashNotesAlertBanner" class="dash-notes-banner" style="display:none;"></div>
+
           <!-- ── 2. QUICK ACTION PILLS ROW ────────────────────────────── -->
           <section class="dash-actions-strip" aria-label="Quick Action Controls">
             <button type="button" class="dash-action-pill primary" onclick="WorkspaceManager.openModule('member-master')">
@@ -998,6 +1003,14 @@
         <div>Society: <strong id="sbSocName" onclick="toggleSocietyPicker()" style="cursor:pointer; color:#1565C0; text-decoration:underline;" title="Click to switch Society">—</strong></div>
         <div>FY: <strong id="sbFYLabel" onclick="toggleFYPicker()" style="cursor:pointer; color:#1565C0; text-decoration:underline;" title="Click to switch Financial Year">—</strong></div>
         <div>User: <strong id="sbUserName">ADMIN</strong></div>
+        <div class="sb-calc-pill" id="sbCalcBtn" onclick="toggleFloatingCalculator()" title="Quick Accounting Calculator (Alt+C)">
+          <i class="bi bi-calculator"></i> <span>Calculator</span> <kbd>Alt+C</kbd>
+        </div>
+        <div class="sb-calc-pill sb-notes-pill" id="sbNotesBtn" onclick="toggleQuickNotes()" title="Society Quick Notes & Reminders (Alt+N)">
+          <i class="bi bi-sticky-fill"></i> <span>Quick Notes</span>
+          <span class="sb-notes-count-badge" id="sbNotesBadge" style="display:none;">0</span>
+          <kbd>Alt+N</kbd>
+        </div>
         <div id="sbClock">16:12:32</div>
       </div>
 
@@ -1074,11 +1087,135 @@
     </div>
   </div>
 
+  <!-- ── FLOATING OVERLAY CALCULATOR (OPTION 1) ───────────────── -->
+  <div class="floating-calc-widget" id="floatingCalcWidget" style="display:none;">
+    <div class="fc-header" id="fcHeader">
+      <div class="fc-title">
+        <i class="bi bi-calculator-fill" style="color:#1565C0;"></i>
+        <span>Calculator</span>
+        <span id="fcMemBadge" class="fc-mem-badge" style="display:none;" title="Memory Value">M: 0</span>
+      </div>
+      <div class="fc-header-actions">
+        <button type="button" class="fc-hbtn" onclick="copyFloatingCalcResult()" title="Copy Result to Clipboard">
+          <i class="bi bi-clipboard"></i>
+        </button>
+        <button type="button" class="fc-hbtn" id="fcTapeToggleBtn" onclick="toggleFloatingCalcTape()" title="Toggle Calculation Tape">
+          <i class="bi bi-journal-text"></i>
+        </button>
+        <button type="button" class="fc-hbtn fc-close-btn" onclick="toggleFloatingCalculator(false)" title="Close Calculator (Esc / Alt+C)">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Screen -->
+    <div class="fc-screen">
+      <div class="fc-prev-expr" id="fcHistory">&nbsp;</div>
+      <div class="fc-display" id="fcDisplay">0</div>
+    </div>
+
+    <!-- Memory Row -->
+    <div class="fc-mem-row">
+      <button type="button" class="fc-btn-mem" onclick="handleFloatingCalcMem('MC')" title="Memory Clear">MC</button>
+      <button type="button" class="fc-btn-mem" onclick="handleFloatingCalcMem('MR')" title="Memory Recall">MR</button>
+      <button type="button" class="fc-btn-mem" onclick="handleFloatingCalcMem('M+')" title="Memory Add">M+</button>
+      <button type="button" class="fc-btn-mem" onclick="handleFloatingCalcMem('M-')" title="Memory Subtract">M-</button>
+    </div>
+
+    <!-- Keypad -->
+    <div class="fc-keypad">
+      <button type="button" class="fc-btn fc-btn-action" onclick="handleFloatingCalcInput('AC')" title="All Clear">AC</button>
+      <button type="button" class="fc-btn fc-btn-action" onclick="handleFloatingCalcInput('BACK')" title="Backspace"><i class="bi bi-backspace"></i></button>
+      <button type="button" class="fc-btn fc-btn-op" onclick="handleFloatingCalcInput('%')" title="Percentage">%</button>
+      <button type="button" class="fc-btn fc-btn-op" onclick="handleFloatingCalcInput('/')" title="Divide">÷</button>
+
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('7')">7</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('8')">8</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('9')">9</button>
+      <button type="button" class="fc-btn fc-btn-op" onclick="handleFloatingCalcInput('*')" title="Multiply">×</button>
+
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('4')">4</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('5')">5</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('6')">6</button>
+      <button type="button" class="fc-btn fc-btn-op" onclick="handleFloatingCalcInput('-')" title="Subtract">−</button>
+
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('1')">1</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('2')">2</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('3')">3</button>
+      <button type="button" class="fc-btn fc-btn-op" onclick="handleFloatingCalcInput('+')" title="Add">+</button>
+
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('0')">0</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('00')">00</button>
+      <button type="button" class="fc-btn" onclick="handleFloatingCalcInput('.')">.</button>
+      <button type="button" class="fc-btn fc-btn-equal" onclick="handleFloatingCalcInput('=')" title="Equals (Enter)">=</button>
+    </div>
+
+    <!-- Collapsible Tape Drawer -->
+    <div class="fc-tape-drawer" id="fcTapeDrawer" style="display:none;">
+      <div class="fc-tape-header">
+        <span><i class="bi bi-clock-history"></i> Calculation Tape</span>
+        <button type="button" class="fc-tape-clear-btn" onclick="clearFloatingCalcTape()">Clear</button>
+      </div>
+      <div class="fc-tape-list custom-scroll" id="fcTapeList">
+        <div class="fc-tape-empty">No calculations yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FLOATING OVERLAY QUICK NOTES (SOCIETY-SPECIFIC) ──────── -->
+  <div class="floating-notes-widget" id="floatingNotesWidget" style="display:none;">
+    <div class="fn-header" id="fnHeader">
+      <div class="fn-title-group">
+        <i class="bi bi-journal-bookmark-fill" style="color:#d97706; font-size:14px;"></i>
+        <span>Quick Notes</span>
+        <span class="fn-soc-badge" id="fnSocTag">Society</span>
+      </div>
+      <div class="fn-header-actions">
+        <button type="button" class="fn-hbtn fn-close-btn" onclick="toggleQuickNotes(false)" title="Close Notes (Esc / Alt+N)">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Add Note Box -->
+    <div class="fn-add-panel">
+      <textarea class="fn-textarea" id="fnInputText" placeholder="Write a note for this society... (e.g. Follow up on maintenance dues, AMC renewal, audit docs)"></textarea>
+      <div class="fn-controls-row">
+        <div class="fn-priority-group">
+          <button type="button" class="fn-priority-btn active normal" id="fnPri_normal" onclick="QuickNotes.setPriority('normal')">Normal</button>
+          <button type="button" class="fn-priority-btn" id="fnPri_important" onclick="QuickNotes.setPriority('important')">Important</button>
+          <button type="button" class="fn-priority-btn" id="fnPri_urgent" onclick="QuickNotes.setPriority('urgent')">Urgent</button>
+        </div>
+        <button type="button" class="fn-save-btn" onclick="QuickNotes.handleSaveClick()" title="Save Note (Ctrl+Enter)">
+          <i class="bi bi-plus-lg"></i>
+          <span>Save Note</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="fn-tabs-strip">
+      <button type="button" class="fn-tab active" id="fnTabAll" onclick="QuickNotes.setTab('all')">
+        All Notes <span id="fnTabAllCount">(0)</span>
+      </button>
+      <button type="button" class="fn-tab" id="fnTabUnread" onclick="QuickNotes.setTab('unread')">
+        Unread Reminders <span id="fnTabUnreadCount">(0)</span>
+      </button>
+    </div>
+
+    <!-- Scrollable Notes List -->
+    <div class="fn-list-container custom-scroll" id="fnNotesList">
+      <!-- Populated dynamically by quick-notes.js -->
+    </div>
+  </div>
+
   <script src="config.js?v=20260928_v3"></script>
   <script src="assets/js/api.js?v=20260928_v3"></script>
   <script src="assets/js/auth.js?v=20260928_v3"></script>
   <script src="assets/js/workspace.js?v=20261001_v2"></script>
   <script src="assets/js/workspace-bridge.js?v=20260928_v3"></script>
+  <script src="assets/js/floating-calc.js?v=20261114_v1"></script>
+  <script src="assets/js/quick-notes.js?v=20261116_v1"></script>
   <script src="modules/dashboard/dashboard.js?v=20261001_v2"></script>
   <script>
     function updateHeaderAndFooterContext() {
@@ -1128,6 +1265,10 @@
       if (sideSoc) sideSoc.textContent = socName || 'Society Master';
       const sideProf = document.getElementById('sideProfileSocName');
       if (sideProf) sideProf.textContent = socName || 'jeevika';
+
+      if (window.QuickNotes && typeof QuickNotes.refresh === 'function') {
+        QuickNotes.refresh();
+      }
     }
 
     (function () {

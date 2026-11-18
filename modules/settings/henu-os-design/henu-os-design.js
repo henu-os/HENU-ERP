@@ -7,26 +7,12 @@
 (function () {
   'use strict';
 
-  // 18 REGISTERED MEMBER REPORT MODULES (From Repository Registry)
+  // 4 REGISTERED MEMBER REPORT MODULES (Debit Note, Credit Note, Member Account | Head wise, Member Register [Dr/Cr])
   const MODULES = [
-    { key: 'bill-format', name: 'Bill Format', icon: 'bi-file-earmark-text', endpoint: '/reports/member/bill-format', orientation: 'portrait', categories: ['general', 'header', 'member', 'table', 'amounts', 'labels', 'qr', 'footer', 'signature', 'page'] },
-    { key: 'receipt', name: 'Receipt', icon: 'bi-receipt', endpoint: '/reports/member/receipt', orientation: 'portrait', categories: ['general', 'header', 'member', 'amounts', 'labels', 'qr', 'footer', 'signature', 'page'] },
     { key: 'debit-note', name: 'Debit Note', icon: 'bi-file-earmark-minus', endpoint: '/reports/member/debit-note', orientation: 'portrait', categories: ['general', 'header', 'member', 'table', 'amounts', 'labels', 'footer', 'signature', 'page'] },
     { key: 'credit-note', name: 'Credit Note', icon: 'bi-file-earmark-plus', endpoint: '/reports/member/credit-note', orientation: 'portrait', categories: ['general', 'header', 'member', 'table', 'amounts', 'labels', 'footer', 'signature', 'page'] },
-    { key: 'adjustment', name: 'Adjustment', icon: 'bi-arrow-left-right', endpoint: '/reports/member/adjustment', orientation: 'portrait', categories: ['general', 'header', 'member', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'outstanding-list', name: 'Outstanding List', icon: 'bi-list-ol', endpoint: '/reports/member-outstanding', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
     { key: 'member-account-head-wise', name: 'Member Account | Head wise', icon: 'bi-table', endpoint: '/reports/member-account-ledger', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'member-register-dr-cr', name: 'Member Register [Dr/Cr]', icon: 'bi-journal-check', endpoint: '/reports/member-register-dr-cr', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'member-control-account', name: 'Member Control Account', icon: 'bi-shield-check', endpoint: '/reports/member/control-account', orientation: 'portrait', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'balance-confirmation-letter', name: 'Balance Confirmation Letter', icon: 'bi-envelope-paper', endpoint: '/reports/member/balance-confirmation', orientation: 'portrait', categories: ['general', 'header', 'member', 'amounts', 'labels', 'footer', 'signature', 'page'] },
-    { key: 'bank-deposit-list', name: 'Bank Deposit List', icon: 'bi-bank', endpoint: '/reports/member/bank-deposit-list', orientation: 'portrait', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'data-sheet', name: 'DATA SHEET', icon: 'bi-layout-text-window', endpoint: '/reports/member/data-sheet', orientation: 'landscape', categories: ['general', 'header', 'table', 'labels', 'footer', 'page'] },
-    { key: 'bill-register', name: 'Bill Register', icon: 'bi-receipt-cutoff', endpoint: '/reports/member/bill-register', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'receipt-register', name: 'Receipt Register', icon: 'bi-cash-coin', endpoint: '/reports/member/receipt-register', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'debit-note-register', name: 'Debit Note Register', icon: 'bi-journal-text', endpoint: '/reports/member/debit-note-register', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'credit-note-register', name: 'Credit Note Register', icon: 'bi-journal-text', endpoint: '/reports/member/credit-note-register', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'adjustment-register', name: 'Adjustment Register', icon: 'bi-arrow-repeat', endpoint: '/reports/member/adjustment-register', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] },
-    { key: 'member-jv-register', name: 'Member JV Register', icon: 'bi-journal-code', endpoint: '/reports/member/member-jv-register', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] }
+    { key: 'member-register-dr-cr', name: 'Member Register [Dr/Cr]', icon: 'bi-journal-check', endpoint: '/reports/member-register-dr-cr', orientation: 'landscape', categories: ['general', 'header', 'table', 'amounts', 'labels', 'footer', 'page'] }
   ];
 
   // CATEGORY DEFINITIONS
@@ -145,7 +131,7 @@
 
   // APP STATE
   let state = {
-    activeReportKey: 'bill-format',
+    activeReportKey: 'debit-note',
     activeCategory: 'general',
     testDataMode: false, // false = REAL ERP DATA / BLANK, true = HENU TEST DATA
     configs: {}, // reportKey -> config

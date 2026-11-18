@@ -267,8 +267,8 @@
 
     if (footCurE) footCurE.textContent = formatINR(totals.grandTotalCurrent);
     if (footCurI) footCurI.textContent = formatINR(totals.grandTotalCurrent);
-    if (footPrevE) footPrevE.textContent = formatINR(totals.grandTotalPrev);
-    if (footPrevI) footPrevI.textContent = formatINR(totals.grandTotalPrev);
+    if (footPrevE) footPrevE.textContent = formatINR(totals.totalExpPrev);
+    if (footPrevI) footPrevI.textContent = formatINR(totals.totalIncPrev);
   };
 
   /**
@@ -281,24 +281,27 @@
     const leftBase = buildSideRows(report.expenditure || [], 'exp', viewMode, hideZero);
     const rightBase = buildSideRows(report.income || [], 'inc', viewMode, hideZero);
 
+    // Current Year balancing only:
+    // Surplus belongs strictly on the Expenditure side (left)
+    // Deficit belongs strictly on the Income side (right)
     let surplusDeficitRow = null;
     let targetSide = null; // 'exp' (left) or 'inc' (right)
 
-    if (sd.isSurplus && Math.abs(sd.netAmount) > 0.005) {
+    if (sd.isSurplus && Math.abs(sd.netAmount || 0) > 0.005) {
       targetSide = 'exp';
       surplusDeficitRow = {
         type: 'surplus-deficit',
         label: 'To Excess of Income over Expenditure (Surplus carried to Balance Sheet)',
-        prevAmount: sd.prevNetAmount > 0 ? sd.prevNetAmount : 0,
-        currentAmount: sd.netAmount
+        prevAmount: null,
+        currentAmount: parseFloat(sd.netAmount) || 0
       };
-    } else if (!sd.isSurplus && Math.abs(sd.netAmount) > 0.005) {
+    } else if (!sd.isSurplus && Math.abs(sd.netAmount || 0) > 0.005) {
       targetSide = 'inc';
       surplusDeficitRow = {
         type: 'surplus-deficit',
         label: 'By Excess of Expenditure over Income (Deficit carried to Balance Sheet)',
-        prevAmount: sd.prevNetAmount < 0 ? Math.abs(sd.prevNetAmount) : 0,
-        currentAmount: Math.abs(sd.netAmount)
+        prevAmount: null,
+        currentAmount: Math.abs(parseFloat(sd.netAmount) || 0)
       };
     }
 
@@ -320,7 +323,7 @@
       rightRows[i] = rightBase[i];
     }
 
-    // Place surplus/deficit row at the VERY BOTTOM (index maxRows - 1)
+    // Place surplus/deficit row strictly at the VERY BOTTOM (index maxRows - 1)
     if (surplusDeficitRow) {
       if (targetSide === 'exp') {
         leftRows[maxRows - 1] = surplusDeficitRow;
@@ -926,7 +929,7 @@
 
     // Col A: Prev Expenditure Grand Total
     if (comparePrev) {
-      setCell(rTotal, 0, parseFloat(totals.grandTotalPrev) || 0, 'n', {
+      setCell(rTotal, 0, parseFloat(totals.totalExpPrev) || 0, 'n', {
         font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
         alignment: { horizontal: 'right', vertical: 'center' },
         border: getBorders(0, thinBorder, doubleBorder)
@@ -952,7 +955,7 @@
 
     // Col E: Prev Income Grand Total
     if (comparePrev) {
-      setCell(rTotal, 4, parseFloat(totals.grandTotalPrev) || 0, 'n', {
+      setCell(rTotal, 4, parseFloat(totals.totalIncPrev) || 0, 'n', {
         font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
         alignment: { horizontal: 'right', vertical: 'center' },
         border: getBorders(4, thinBorder, doubleBorder)

@@ -1,0 +1,376 @@
+/* ═════════════════════════════════════════════════════════════════════
+   JEEVIKA ERP v2 — FLOATING ACCOUNTING CALCULATOR (OPTION 1)
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* Bottom Status Bar Shortcut Button */
+.sb-calc-pill {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1e293b;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  line-height: 1.4;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.sb-calc-pill:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.sb-calc-pill.active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #1d4ed8;
+}
+
+.sb-calc-pill.active i {
+  color: #ffffff;
+}
+
+.sb-calc-pill.active kbd {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.sb-calc-pill i {
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.sb-calc-pill kbd {
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid #cbd5e1;
+}
+
+/* Floating Calculator Popup Window */
+.floating-calc-widget {
+  position: fixed;
+  bottom: 34px;
+  right: 20px;
+  width: 310px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22), 0 2px 6px rgba(15, 23, 42, 0.08);
+  z-index: 99999;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  user-select: none;
+}
+
+.floating-calc-widget.show {
+  display: flex;
+  animation: floatCalcIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes floatCalcIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.fc-header {
+  background: #f8fafc;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  border-top-left-radius: 7px;
+  border-top-right-radius: 7px;
+}
+
+.fc-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.fc-mem-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+.fc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fc-hbtn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #64748b;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+
+.fc-hbtn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.fc-hbtn.active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+.fc-hbtn.fc-close-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.fc-screen {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 10px 14px;
+  text-align: right;
+  border-bottom: 1px solid #1e293b;
+  position: relative;
+}
+
+.fc-prev-expr {
+  font-size: 11px;
+  color: #94a3b8;
+  min-height: 16px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  letter-spacing: 0.5px;
+}
+
+.fc-display {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: 'Consolas', 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.fc-mem-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 6px 10px 0 10px;
+  background: #f8fafc;
+}
+
+.fc-btn-mem {
+  height: 26px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.fc-btn-mem:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.fc-keypad {
+  padding: 8px 10px 10px 10px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  background: #f8fafc;
+}
+
+.fc-btn {
+  height: 38px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fc-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.fc-btn:active {
+  transform: scale(0.96);
+}
+
+.fc-btn-op {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.fc-btn-op:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.fc-btn-action {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fc-btn-action:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.fc-btn-equal {
+  background: #1565C0;
+  color: #ffffff;
+  border-color: #1565C0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.fc-btn-equal:hover {
+  background: #0D47A1;
+  border-color: #0D47A1;
+}
+
+.fc-tape-drawer {
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  max-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-tape-header {
+  padding: 6px 10px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fc-tape-clear-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 1px 4px;
+}
+
+.fc-tape-clear-btn:hover {
+  text-decoration: underline;
+}
+
+.fc-tape-list {
+  padding: 6px 10px;
+  overflow-y: auto;
+  max-height: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+}
+
+.fc-tape-item {
+  padding: 4px 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fc-tape-item:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.fc-tape-expr {
+  color: #64748b;
+}
+
+.fc-tape-res {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.fc-tape-empty {
+  color: #94a3b8;
+  text-align: center;
+  padding: 12px;
+  font-size: 11px;
+}
+
+.fc-toast-pill {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #10B981;
+  color: #ffffff;
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.fc-toast-pill.show {
+  opacity: 1;
+}

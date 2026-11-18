@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Budget Report (Income &amp; Expenditure) — JEEVIKA ERP</title>
+  <script src="../../../config.js"></script>
+  <script src="../../../assets/js/utils.js"></script>
+  <script src="../../../assets/js/auth.js"></script>
+  <script src="../../../assets/js/api.js"></script>
+  <script src="../../../assets/js/xlsx-js-style.bundle.js"></script>
+  <link rel="stylesheet" href="../../../assets/css/global.css">
+  <link rel="stylesheet" href="../../../assets/css/components.css">
+  <link rel="stylesheet" href="budget-report.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="erp-module">
+
+  <!-- ── Top Action & Filter Toolbar ─────────────────────────────────────────── -->
+  <div class="bgt-toolbar">
+    <div class="bgt-filter-group">
+      <div class="bgt-filter-item">
+        <label for="bgt-fy"><i class="bi bi-calendar3"></i> FY:</label>
+        <select id="bgt-fy" class="bgt-select" onchange="onFyChanged()">
+          <option value="1" selected>2026-2027</option>
+        </select>
+      </div>
+
+      <div class="bgt-filter-item">
+        <label for="bgt-from-date"><i class="bi bi-calendar-event"></i> From:</label>
+        <input type="date" id="bgt-from-date" class="bgt-input fy-date" style="width:125px;" onchange="loadBudgetData()">
+      </div>
+
+      <div class="bgt-filter-item">
+        <label for="bgt-to-date"><i class="bi bi-calendar-event"></i> To:</label>
+        <input type="date" id="bgt-to-date" class="bgt-input fy-date" style="width:125px;" onchange="loadBudgetData()">
+      </div>
+
+      <div class="bgt-filter-item">
+        <label for="bgt-view-mode"><i class="bi bi-eye"></i> View:</label>
+        <select id="bgt-view-mode" class="bgt-select" onchange="renderBudgetView()">
+          <option value="detailed" selected>Detailed (Heads &amp; Codes)</option>
+          <option value="summary">Summary (Groups Only)</option>
+        </select>
+      </div>
+
+      <div class="bgt-filter-item" style="display:flex; align-items:center; gap:6px;">
+        <label class="erp-toggle-switch">
+          <input type="checkbox" id="chk-hide-zero" onchange="renderBudgetView()">
+          <span class="erp-toggle-slider"></span>
+        </label>
+        <span style="font-size:11.5px; font-weight:700; color:#334155; cursor:pointer;" onclick="document.getElementById('chk-hide-zero').click()">Hide Zero</span>
+      </div>
+    </div>
+
+    <div class="d-flex gap-6 btn-no-print">
+      <button class="bgt-btn bgt-btn-warning" onclick="openAutoProjectModal()" title="Auto-calculate Proposed Budget based on percentage markup">
+        <i class="bi bi-calculator"></i> Auto Project (+%)
+      </button>
+      <button class="bgt-btn bgt-btn-primary" onclick="saveBudget()" id="btn-save-budget" title="Save all edited Approved and Proposed budget numbers">
+        <i class="bi bi-floppy2"></i> Save Budget
+      </button>
+      <button class="bgt-btn" onclick="loadBudgetData()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+      <button class="bgt-btn" onclick="printReport()">
+        <i class="bi bi-printer"></i> Print Statement
+      </button>
+      <button class="bgt-btn bgt-btn-success" onclick="exportToExcel()">
+        <i class="bi bi-file-earmark-excel"></i> Export Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Full-Height Scrollable Body Area ───────────────────────────────────── -->
+  <div class="bgt-scroll-wrapper">
+    <div class="bgt-report-container">
+
+      <!-- Society Header Section -->
+      <div class="bgt-header">
+        <div class="bgt-soc-name" id="disp-soc-name">CO-OPERATIVE HOUSING SOCIETY LTD.</div>
+        <div class="bgt-soc-sub" id="disp-soc-sub">Registration No: — | Address: —</div>
+        <div class="bgt-title">
+          BUDGET ESTIMATE STATEMENT (INCOME &amp; EXPENDITURE)
+        </div>
+        <div class="bgt-period-text" id="disp-period-text">
+          Financial Year: <span id="disp-fy-label">2026-2027</span> | Period: <span id="disp-period">—</span>
+        </div>
+      </div>
+
+      <!-- Main Format A Budget Comparison Table -->
+      <div class="bgt-table-responsive">
+        <table class="bgt-table" id="bgtTable">
+          <colgroup>
+            <col class="col-particulars" style="width: 32%;">
+            <col class="col-prev-act" style="width: 13%;">
+            <col class="col-cur-app" style="width: 14%;">
+            <col class="col-cur-act" style="width: 13%;">
+            <col class="col-next-prop" style="width: 14%;">
+            <col class="col-var" style="width: 14%;">
+          </colgroup>
+          <thead>
+            <tr class="bgt-col-header-row">
+              <th class="bgt-col-header text-start">Particulars / Account Head</th>
+              <th class="bgt-col-header text-end col-amount" id="th-prev-actual">Previous Year<br>Actuals (₹)</th>
+              <th class="bgt-col-header text-end col-amount bgt-th-budget" id="th-cur-approved">Current Year<br>Approved Budget (₹)</th>
+              <th class="bgt-col-header text-end col-amount" id="th-cur-actual">Current Year<br>Actuals (₹)</th>
+              <th class="bgt-col-header text-end col-amount bgt-th-proposed" id="th-next-proposed">Next Year<br>Proposed Budget (₹)</th>
+              <th class="bgt-col-header text-end col-amount" id="th-variance">Variance (₹)<br><span style="font-size:9.5px; font-weight:normal;">(Actual − Budget)</span></th>
+            </tr>
+          </thead>
+          <tbody id="bgtTBody">
+            <tr>
+              <td colspan="6" class="text-center text-muted" style="padding:40px;">
+                <i class="bi bi-arrow-repeat spin"></i> Loading Budget Report...
+              </td>
+            </tr>
+          </tbody>
+          <tfoot id="bgtTFoot">
+            <!-- Grand Totals will be dynamically injected here -->
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Statutory Signatory Attestation (Prints on Last Page) -->
+      <div class="bgt-sign-container">
+        <div class="bgt-sign-society" id="bgtSignSocName">For Co-Operative Housing Society Ltd.</div>
+        <div class="bgt-sign-boxes">
+          <div class="bgt-sign-box">Secretary</div>
+          <div class="bgt-sign-box">Chairman</div>
+          <div class="bgt-sign-box">Treasurer</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Auto Projection Modal ─────────────────────────────────────────────── -->
+  <div id="modalAutoProject" class="bgt-modal-backdrop" style="display:none;">
+    <div class="bgt-modal-dialog">
+      <div class="bgt-modal-header">
+        <h5 class="bgt-modal-title"><i class="bi bi-calculator"></i> Auto-Project Next Year Budget</h5>
+        <button type="button" class="bgt-modal-close" onclick="closeAutoProjectModal()">&times;</button>
+      </div>
+      <div class="bgt-modal-body">
+        <p style="font-size:12.5px; color:#475569; margin-bottom:14px;">
+          Calculate Next Year's <strong>Proposed Budget</strong> automatically by applying a percentage markup to existing figures.
+        </p>
+
+        <div class="bgt-form-group">
+          <label class="bgt-form-label">Base Source Column:</label>
+          <select id="proj-source-col" class="bgt-select" style="width:100%;">
+            <option value="currentActual" selected>Current Year Actuals</option>
+            <option value="approvedBudget">Current Year Approved Budget</option>
+            <option value="prevActual">Previous Year Actuals</option>
+          </select>
+        </div>
+
+        <div class="bgt-form-group" style="margin-top:12px;">
+          <label class="bgt-form-label">Percentage Increase / Inflation (%):</label>
+          <input type="number" id="proj-percentage" class="bgt-input" value="10" step="0.5" style="width:100%;">
+          <span style="font-size:11px; color:#64748b; margin-top:4px; display:block;">
+            Tip: Enter 10 for a 10% increase, or 0 to copy the exact base amount.
+          </span>
+        </div>
+
+        <div class="bgt-form-group" style="margin-top:12px;">
+          <label class="bgt-form-label">Apply To:</label>
+          <select id="proj-apply-target" class="bgt-select" style="width:100%;">
+            <option value="both" selected>Both Expenditure &amp; Income Heads</option>
+            <option value="expenditure">Expenditure Heads Only</option>
+            <option value="income">Income Heads Only</option>
+          </select>
+        </div>
+      </div>
+      <div class="bgt-modal-footer">
+        <button class="bgt-btn" onclick="closeAutoProjectModal()">Cancel</button>
+        <button class="bgt-btn bgt-btn-primary" onclick="applyAutoProjection()">
+          <i class="bi bi-check2-circle"></i> Apply Projection
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="budget-report.js"></script>
+</body>
+</html>

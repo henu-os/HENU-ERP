@@ -25,11 +25,25 @@ const WorkspaceBridge = (() => {
           window.WorkspaceManager.openModule(payload.moduleId, payload.queryParams || payload.params || '');
         } else if (action === 'updateGstMenuVisibility') {
           window.WorkspaceManager.updateGstMenuVisibility();
+        } else if (action === 'toggleCalculator') {
+          if (typeof window.toggleFloatingCalculator === 'function') {
+            window.toggleFloatingCalculator();
+          }
         }
       }
     } catch (e) {
       console.warn('[WorkspaceBridge] postMessage error:', e);
     }
+  }
+
+  // Intercept Alt+C inside child iframe modules to toggle parent floating calculator
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        _send('toggleCalculator');
+      }
+    });
   }
 
   return {
@@ -57,6 +71,9 @@ const WorkspaceBridge = (() => {
     },
     updateGstMenuVisibility: function() {
       _send('updateGstMenuVisibility', {});
+    },
+    toggleCalculator: function() {
+      _send('toggleCalculator', {});
     }
   };
 

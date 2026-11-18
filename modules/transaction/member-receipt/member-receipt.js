@@ -1504,6 +1504,35 @@
       bankSel.innerHTML = optHtml;
     }
 
+    // Populate Bill Type filter dropdown (deduplicated case-insensitively)
+    var billTypeSel = document.getElementById('bs-billtype-filter');
+    if (billTypeSel) {
+      var currentBtVal = (billTypeSel.value || '').trim().toUpperCase();
+      var btMap = {};
+      if (Array.isArray(billTypes)) {
+        billTypes.forEach(function (b) {
+          var name = (typeof b === 'string' ? b : (b.name || b.billTypeName || '')).trim();
+          if (name) {
+            var key = name.toUpperCase();
+            if (!btMap[key]) btMap[key] = key;
+          }
+        });
+      }
+      receipts.forEach(function (r) {
+        if (r.billType && r.billType.trim()) {
+          var key = r.billType.trim().toUpperCase();
+          if (!btMap[key]) btMap[key] = key;
+        }
+      });
+      var btList = Object.keys(btMap).sort();
+      var btOptHtml = '<option value="">-- All Bill Types --</option>';
+      btList.forEach(function (bt) {
+        var sel = (bt === currentBtVal) ? ' selected' : '';
+        btOptHtml += '<option value="' + escHtml(bt) + '"' + sel + '>' + escHtml(bt) + '</option>';
+      });
+      billTypeSel.innerHTML = btOptHtml;
+    }
+
     filterBankSlip();
 
     document.getElementById('mr-section-list').style.display = 'none';
@@ -1522,6 +1551,7 @@
     if (!tbody) return;
 
     var bankFilter = (document.getElementById('bs-bank-filter') ? document.getElementById('bs-bank-filter').value.trim() : '');
+    var billTypeFilter = (document.getElementById('bs-billtype-filter') ? document.getElementById('bs-billtype-filter').value.trim() : '');
     var fromDate = (document.getElementById('bs-from-date') ? document.getElementById('bs-from-date').value.trim() : '');
     var toDate = (document.getElementById('bs-to-date') ? document.getElementById('bs-to-date').value.trim() : '');
     var fromNoRaw = (document.getElementById('bs-from-no') ? document.getElementById('bs-from-no').value.trim() : '');
@@ -1540,6 +1570,7 @@
       if (!r.chqNo || r.chqNo === '—' || !r.chqNo.trim()) return false;
 
       if (bankFilter && (r.cashBank || '').trim() !== bankFilter) return false;
+      if (billTypeFilter && (r.billType || '').trim().toLowerCase() !== billTypeFilter.toLowerCase()) return false;
 
       if (fromDate && (r.receiptDate || '') < fromDate) return false;
       if (toDate && (r.receiptDate || '') > toDate) return false;
@@ -1571,6 +1602,7 @@
         '<td class="mr-mono">' + escHtml(c.receiptDate || '') + '</td>' +
         '<td class="mr-mono" style="font-weight:700; color:#1565C0;">' + escHtml(c.receiptNo || c.voucherNo || '') + '</td>' +
         '<td>' + escHtml(c.memberName || c.personName || '') + '</td>' +
+        '<td style="text-align:center;"><span style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:700;">' + escHtml(c.billType || 'Maintenance') + '</span></td>' +
         '<td class="mr-mono" style="font-weight:700;">' + escHtml(c.chqNo || '') + '</td>' +
         '<td>' + escHtml(c.bankName || '—') + '</td>' +
         '<td>' + escHtml(c.cashBank || '') + '</td>' +
@@ -1579,7 +1611,7 @@
         '</tr>';
     });
 
-    tbody.innerHTML = html || '<tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:30px;">No cheques found matching filter criteria.</td></tr>';
+    tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:30px;">No cheques found matching filter criteria.</td></tr>';
 
     var countEl = document.getElementById('mr-cheque-count');
     if (countEl) countEl.textContent = filtered.length + ' Cheque(s)';
@@ -1593,6 +1625,7 @@
 
   window.resetBankSlipFilters = function () {
     if (document.getElementById('bs-bank-filter')) document.getElementById('bs-bank-filter').value = '';
+    if (document.getElementById('bs-billtype-filter')) document.getElementById('bs-billtype-filter').value = '';
     if (document.getElementById('bs-from-date')) document.getElementById('bs-from-date').value = '';
     if (document.getElementById('bs-to-date')) document.getElementById('bs-to-date').value = '';
     if (document.getElementById('bs-from-no')) document.getElementById('bs-from-no').value = '';
@@ -1609,6 +1642,7 @@
 
     var socName = (window.Auth && Auth.getSocietyName) ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'Society Name');
     var bankFilter = (document.getElementById('bs-bank-filter') ? document.getElementById('bs-bank-filter').value.trim() : '') || 'All Deposit Accounts';
+    var billTypeFilter = (document.getElementById('bs-billtype-filter') ? document.getElementById('bs-billtype-filter').value.trim() : '') || 'All Bill Types';
     var fromDate = (document.getElementById('bs-from-date') ? document.getElementById('bs-from-date').value.trim() : '');
     var toDate = (document.getElementById('bs-to-date') ? document.getElementById('bs-to-date').value.trim() : '');
     var dateRangeStr = (fromDate && toDate) ? (fromDate + ' to ' + toDate) : (fromDate || toDate || todayISO());
@@ -1625,6 +1659,7 @@
         '<td style="border:1px solid #94a3b8; padding:5px 6px; font-weight:bold; font-family:monospace;">' + escHtml(r.receiptNo || r.voucherNo || '') + '</td>' +
         '<td style="border:1px solid #94a3b8; padding:5px 6px;">' + escHtml(r.memberName || r.personName || '') + '</td>' +
         '<td style="border:1px solid #94a3b8; padding:5px 6px; text-align:center;">' + escHtml(r.flatNo || r.wingFlat || '—') + '</td>' +
+        '<td style="border:1px solid #94a3b8; padding:5px 6px; text-align:center;">' + escHtml(r.billType || 'Maintenance') + '</td>' +
         '<td style="border:1px solid #94a3b8; padding:5px 6px; font-weight:bold; font-family:monospace; text-align:center;">' + escHtml(r.chqNo || '') + '</td>' +
         '<td style="border:1px solid #94a3b8; padding:5px 6px;">' + escHtml(r.bankName || '—') + '</td>' +
         '<td style="border:1px solid #94a3b8; padding:5px 6px;">' + escHtml(r.cashBank || '') + '</td>' +
@@ -1649,6 +1684,7 @@
       '</div>' +
       '<div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:10px; background:#f8fafc; padding:8px 10px; border:1px solid #cbd5e1; border-radius:4px;">' +
       '<div><strong>Deposit Account:</strong> ' + escHtml(bankFilter) + '</div>' +
+      '<div><strong>Bill Type:</strong> ' + escHtml(billTypeFilter) + '</div>' +
       '<div><strong>Period / Date:</strong> ' + escHtml(dateRangeStr) + '</div>' +
       '<div><strong>Total Cheques:</strong> ' + rows.length + '</div>' +
       '<div><strong>Printed On:</strong> ' + todayISO() + '</div>' +
@@ -1656,21 +1692,22 @@
       '<table>' +
       '<thead>' +
       '<tr>' +
-      '<th style="width:30px; text-align:center;">#</th>' +
-      '<th style="width:75px; text-align:center;">DATE</th>' +
-      '<th style="width:105px;">RECEIPT NO</th>' +
+      '<th style="width:25px; text-align:center;">#</th>' +
+      '<th style="width:70px; text-align:center;">DATE</th>' +
+      '<th style="width:95px;">RECEIPT NO</th>' +
       '<th>MEMBER NAME</th>' +
-      '<th style="width:65px; text-align:center;">FLAT</th>' +
-      '<th style="width:85px; text-align:center;">CHEQUE NO</th>' +
-      '<th style="width:115px;">DRAWEE BANK</th>' +
-      '<th style="width:125px;">DEPOSIT ACC</th>' +
-      '<th style="width:90px; text-align:right;">AMOUNT (₹)</th>' +
+      '<th style="width:55px; text-align:center;">FLAT</th>' +
+      '<th style="width:95px; text-align:center;">BILL TYPE</th>' +
+      '<th style="width:80px; text-align:center;">CHEQUE NO</th>' +
+      '<th style="width:105px;">DRAWEE BANK</th>' +
+      '<th style="width:115px;">DEPOSIT ACC</th>' +
+      '<th style="width:85px; text-align:right;">AMOUNT (₹)</th>' +
       '</tr>' +
       '</thead>' +
       '<tbody>' + trs + '</tbody>' +
       '<tfoot>' +
       '<tr style="background:#f1f5f9; font-weight:bold;">' +
-      '<td colspan="8" style="border:1px solid #94a3b8; padding:7px; text-align:right; font-size:11px;">TOTAL AMOUNT (₹):</td>' +
+      '<td colspan="9" style="border:1px solid #94a3b8; padding:7px; text-align:right; font-size:11px;">TOTAL AMOUNT (₹):</td>' +
       '<td style="border:1px solid #94a3b8; padding:7px; text-align:right; font-size:12px; font-family:monospace; color:#1e3a8a;">₹' + totalAmt.toFixed(2) + '</td>' +
       '</tr>' +
       '</tfoot>' +
@@ -1714,6 +1751,7 @@
 
     var socName = (window.Auth && Auth.getSocietyName) ? Auth.getSocietyName() : (sessionStorage.getItem('activeSocietyName') || 'Society');
     var bankFilter = (document.getElementById('bs-bank-filter') ? document.getElementById('bs-bank-filter').value.trim() : '') || 'All Deposit Accounts';
+    var billTypeFilter = (document.getElementById('bs-billtype-filter') ? document.getElementById('bs-billtype-filter').value.trim() : '') || 'All Bill Types';
     var fromDate = (document.getElementById('bs-from-date') ? document.getElementById('bs-from-date').value.trim() : '');
     var toDate = (document.getElementById('bs-to-date') ? document.getElementById('bs-to-date').value.trim() : '');
     var dateStr = (fromDate && toDate) ? (fromDate + ' to ' + toDate) : (fromDate || toDate || todayISO());
@@ -1721,10 +1759,10 @@
     var wsData = [];
     wsData.push([socName.toUpperCase()]);
     wsData.push(['BANK DEPOSIT SLIP / CHEQUE SCHEDULE']);
-    wsData.push(['Deposit Account: ' + bankFilter, '', 'Period: ' + dateStr, '', '', '', '', 'Generated: ' + todayISO()]);
+    wsData.push(['Deposit Account: ' + bankFilter, '', 'Bill Type: ' + billTypeFilter, '', 'Period: ' + dateStr, '', '', '', '', 'Generated: ' + todayISO()]);
     wsData.push([]);
 
-    wsData.push(['SR NO', 'DATE', 'RECEIPT NO', 'MEMBER NAME', 'FLAT NO', 'CHEQUE NO', 'DRAWEE BANK', 'DEPOSIT ACCOUNT', 'AMOUNT (₹)', 'STATUS']);
+    wsData.push(['SR NO', 'DATE', 'RECEIPT NO', 'MEMBER NAME', 'FLAT NO', 'BILL TYPE', 'CHEQUE NO', 'DRAWEE BANK', 'DEPOSIT ACCOUNT', 'AMOUNT (₹)', 'STATUS']);
 
     var totalAmt = 0;
     rows.forEach(function (c, idx) {
@@ -1736,6 +1774,7 @@
         c.receiptNo || c.voucherNo || '',
         c.memberName || c.personName || '',
         c.flatNo || c.wingFlat || '',
+        c.billType || 'Maintenance',
         c.chqNo || '',
         c.bankName || '',
         c.cashBank || '',
@@ -1744,7 +1783,7 @@
       ]);
     });
 
-    wsData.push(['', '', '', '', '', '', '', 'TOTAL AMOUNT:', totalAmt, rows.length + ' Cheques']);
+    wsData.push(['', '', '', '', '', '', '', '', 'TOTAL AMOUNT:', totalAmt, rows.length + ' Cheques']);
 
     var ws = XLSX.utils.aoa_to_sheet(wsData);
 
@@ -1754,6 +1793,7 @@
       { wch: 16 },
       { wch: 25 },
       { wch: 12 },
+      { wch: 15 },
       { wch: 14 },
       { wch: 22 },
       { wch: 26 },

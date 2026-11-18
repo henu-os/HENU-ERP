@@ -3,81 +3,148 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DATA SHEET — HENU ERP</title>
+  <title>Data Sheet (Bill & Collection Register) — HENU ERP</title>
   <script src="../../../config.js"></script>
   <link rel="stylesheet" href="../../../assets/vendor/bootstrap-icons/bootstrap-icons.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="../henu-os-report-engine.css">
   <link rel="stylesheet" href="data-sheet.css">
+  <!-- Styled SheetJS for professional Excel (.xlsx) export -->
+  <script src="../../../assets/js/xlsx-js-style.bundle.js"></script>
 </head>
 <body class="erp-module">
 
-  <!-- Top Header Bar -->
-  <header class="module-top-bar">
+  <!-- Top Action Bar -->
+  <header class="module-top-bar no-print">
     <div class="module-title">
-      <i class="bi bi-layout-text-window text-primary"></i>
-      <span>Member Reports ➔ DATA SHEET (Comprehensive Member Master Directory)</span>
+      <i class="bi bi-journal-check text-primary"></i>
+      <span>Member Reports ➔ Data Sheet (Bill & Collection Register)</span>
     </div>
     <div class="top-actions">
       <button class="btn-top" id="btnRefresh" title="Reload from Server">
         <i class="bi bi-arrow-clockwise"></i> Refresh
       </button>
-      <button class="btn-top" id="btnReset" title="Reset Filters">
+      <button class="btn-top" id="btnReset" title="Reset Filters to Default">
         <i class="bi bi-x-circle"></i> Reset
       </button>
-      <button class="btn-top btn-top-primary" id="btnPrint" title="Print Data Sheet">
+      <button class="btn-top btn-top-success" id="btnExportExcel" title="Export to Excel (.xlsx)">
+        <i class="bi bi-file-earmark-excel"></i> Export Excel
+      </button>
+      <button class="btn-top btn-top-primary" id="btnPrint" title="Print Register">
         <i class="bi bi-printer"></i> Print
       </button>
-      <button class="btn-top btn-top-success" id="btnPdf" title="Export PDF">
+      <button class="btn-top btn-top-warning" id="btnExportPdf" title="Export PDF">
         <i class="bi bi-file-earmark-pdf"></i> Export PDF
       </button>
     </div>
   </header>
 
   <!-- Filter Strip -->
-  <div class="filter-strip">
-    <div class="filter-group" style="width:120px;">
+  <div class="filter-strip no-print">
+    <!-- Period Preset Filter -->
+    <div class="filter-group" style="min-width: 155px;">
+      <label class="filter-label"><i class="bi bi-calendar-range"></i> Time Period:</label>
+      <select class="filter-input" id="filterPeriodPreset">
+        <option value="start_current" selected>START to CURRENT</option>
+        <option value="current_month">Current Month</option>
+        <option value="last_month">Last Month</option>
+        <option value="q1">Q1 (Apr - Jun)</option>
+        <option value="q2">Q2 (Jul - Sep)</option>
+        <option value="q3">Q3 (Oct - Dec)</option>
+        <option value="q4">Q4 (Jan - Mar)</option>
+        <option value="full_fy">Full Financial Year</option>
+        <option value="custom">Custom Date Range</option>
+      </select>
+    </div>
+
+    <!-- From Date -->
+    <div class="filter-group" style="width: 135px;">
+      <label class="filter-label">From Date:</label>
+      <input type="date" class="filter-input" id="filterFromDate">
+    </div>
+
+    <!-- To Date -->
+    <div class="filter-group" style="width: 135px;">
+      <label class="filter-label">To Date:</label>
+      <input type="date" class="filter-input" id="filterToDate">
+    </div>
+
+    <!-- Bill Type Filter -->
+    <div class="filter-group" style="min-width: 140px;">
+      <label class="filter-label">Bill Type:</label>
+      <select class="filter-input" id="filterBillType">
+        <option value="0" selected>All Bill Types</option>
+      </select>
+    </div>
+
+    <!-- Wing Filter -->
+    <div class="filter-group" style="width: 90px;">
       <label class="filter-label">Wing:</label>
-      <input type="text" class="filter-input" id="filterWing" placeholder="All Wings">
+      <input type="text" class="filter-input" id="filterWing" placeholder="All">
     </div>
 
-    <div class="filter-group" style="width:140px;">
-      <label class="filter-label">Flat Type / BHK:</label>
-      <input type="text" class="filter-input" id="filterFlatType" placeholder="All Types">
+    <!-- Status Filter -->
+    <div class="filter-group" style="width: 110px;">
+      <label class="filter-label">Status:</label>
+      <select class="filter-input" id="filterStatus">
+        <option value="all" selected>All</option>
+        <option value="Paid">Paid</option>
+        <option value="Partial">Partial</option>
+        <option value="Unpaid">Unpaid</option>
+        <option value="Advance">Advance Only</option>
+      </select>
     </div>
 
-    <div class="filter-group" style="min-width:200px; flex:1; max-width:320px;">
-      <label class="filter-label">Search Member / Flat / Phone:</label>
-      <input type="text" class="filter-input" id="filterSearch" placeholder="Type to search...">
+    <!-- Search / Member -->
+    <div class="filter-group" style="min-width: 160px; flex-grow: 1;">
+      <label class="filter-label">Search:</label>
+      <input type="text" class="filter-input" id="filterSearch" placeholder="Filter by Member / Flat / Bill / Chq / Bank...">
     </div>
 
-    <div class="filter-group" style="align-self:flex-end;">
+    <!-- Action Buttons -->
+    <div class="filter-group" style="align-self: flex-end;">
       <button class="btn-top btn-top-primary" id="btnApplyFilters">
         <i class="bi bi-funnel"></i> Apply
       </button>
     </div>
   </div>
 
-  <!-- KPI / Summary Strip -->
-  <div class="kpi-summary-strip" id="kpiStrip" style="display:none;">
+  <!-- KPI Summary Strip -->
+  <div class="kpi-summary-strip no-print" id="kpiStrip">
     <div class="kpi-pill">
-      <span class="kpi-lbl">Total Members:</span>
-      <span class="kpi-val" id="kpiTotalMembers">0</span>
+      <span class="kpi-lbl">Total Bills:</span>
+      <span class="kpi-val" id="kpiTotalBills">0</span>
     </div>
     <div class="kpi-pill">
-      <span class="kpi-lbl">Total Carpet Area:</span>
-      <span class="kpi-val" id="kpiTotalArea">0 Sq.Ft</span>
+      <span class="kpi-lbl">Bill Amount:</span>
+      <span class="kpi-val" id="kpiBillAmount">₹ 0.00</span>
     </div>
     <div class="kpi-pill">
-      <span class="kpi-lbl">Total Opening Debtors:</span>
-      <span class="kpi-val" id="kpiTotalOpening" style="color:var(--ds-primary);">₹0.00</span>
+      <span class="kpi-lbl">Interest:</span>
+      <span class="kpi-val" id="kpiInterest">₹ 0.00</span>
+    </div>
+    <div class="kpi-pill">
+      <span class="kpi-lbl">Arrears:</span>
+      <span class="kpi-val" id="kpiArrears">₹ 0.00</span>
+    </div>
+    <div class="kpi-pill" style="border-left: 2px solid #2563eb;">
+      <span class="kpi-lbl">Total Dues:</span>
+      <span class="kpi-val" id="kpiTotalDues" style="color:#2563eb; font-weight:800;">₹ 0.00</span>
+    </div>
+    <div class="kpi-pill" style="border-left: 2px solid #16a34a;">
+      <span class="kpi-lbl">Total Collections:</span>
+      <span class="kpi-val" id="kpiTotalCollections" style="color:#16a34a; font-weight:800;">₹ 0.00</span>
+    </div>
+    <div class="kpi-pill" style="border-left: 2px solid #dc2626;">
+      <span class="kpi-lbl">Outstanding Balance:</span>
+      <span class="kpi-val" id="kpiOutstanding" style="color:#dc2626; font-weight:800;">₹ 0.00</span>
     </div>
   </div>
 
   <!-- Main Viewport -->
   <main class="report-viewport">
-    <div id="dataSheetContainer" style="width:100%; display:flex; flex-direction:column; align-items:center;">
-      <!-- Dynamic Data Sheet rendered here -->
+    <div id="dsContainer" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+      <!-- Dynamic Data Sheet (Bill & Collection Register) Rendered Here -->
     </div>
   </main>
 
